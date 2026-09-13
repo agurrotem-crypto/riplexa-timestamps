@@ -3,7 +3,7 @@
 **See when everything happened, right inside the conversation.** In the Claude Code and Codex chat panels, every message you send, every reply, every thinking block and every tool call gets its real time, inline at the start of its own text line. There is no side panel and no separate log.
 
 ```
-20:58:57  בדיקה 4                                   ← your message
+20:58:57  Is the build green?                       ← your message
 20:59:06  Thought for 7s
 20:59:07→20:59:07  Read  docs/memory/feedback.md    ← tool call: started → result came back
 20:59:22→20:59:26  PowerShell  Read recorded timestamp…
@@ -60,8 +60,8 @@ Install, then reload the window (or close and reopen the Claude Code panel) once
 | --- | --- |
 | `Riplexa Timestamps: Toggle On/Off` | Same as clicking the status bar item (live) |
 | `Riplexa Timestamps: Turn On` / `Turn Off` | Explicit on / off (live) |
-| `Riplexa Timestamps: Remove from Claude Code` | Restore Claude Code's original files (reload to finish) |
-| `Riplexa Timestamps: Show Status` | Show whether each Claude Code install is patched |
+| `Riplexa Timestamps: Remove from chat panels` | Restore the original Claude Code and Codex files (reload to finish) |
+| `Riplexa Timestamps: Show Status` | Show whether each supported panel is patched |
 
 Settings (all live):
 
@@ -78,7 +78,8 @@ Settings (all live):
 
 - The patch targets the structure of Claude Code's panel code. If a future Claude Code build changes it, this extension refuses to patch and tells you, rather than guessing. Please open an issue.
 - The first install and each upgrade of the patch appear after the panel reloads once.
-- This is an unofficial, community extension. It is not made by, endorsed by or affiliated with Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic.
+- Codex: a reply gets a time only when Codex itself recorded one. Replies loaded from an older session usually have none, so they show no time.
+- This is an unofficial, community extension. It is not made by, endorsed by or affiliated with Anthropic or OpenAI. "Claude" and "Claude Code" are trademarks of Anthropic; "Codex" and "ChatGPT" are trademarks of OpenAI.
 
 ## License
 

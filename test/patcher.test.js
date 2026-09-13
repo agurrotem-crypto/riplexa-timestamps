@@ -123,7 +123,7 @@ const ts = (e) => e._a['data-riplexa-ts'] || null;
 test('the user message gets one time, inline on its text line, never on an attachment chip', () => {
   const msg = { timestamp: today(20, 58, 57) };
   const chip = el('span', '', [txt('index.js')]);
-  const text = el('div', 'content_x', [txt('בדיקה 4')]);
+  const text = el('div', 'content_x', [txt('Test 4')]);
   const empty = el('div', 'userMessage_x', [], [{ message: msg }]);
   const bubble = el('div', 'userMessage_x', [el('div', 'userMessageAttachments_x', [chip]), el('div', '', [text])], [{ message: msg }]);
   const ctx = runScript([empty, bubble], []);
@@ -137,7 +137,7 @@ test('the user message gets one time, inline on its text line, never on an attac
 
 test('live settings: Off clears every mark without a reload, On brings them back', () => {
   const msg = { timestamp: today(21, 28, 44) };
-  const text = el('div', '', [txt('בלי RELOAD')]);
+  const text = el('div', '', [txt('No reload')]);
   const ctx = runScript([el('div', 'userMessage_x', [text], [{ message: msg }])], []);
   links(ctx)[0].onload();
   assert.equal(ts(text), '21:28:44');

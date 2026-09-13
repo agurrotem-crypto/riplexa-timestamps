@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+
+- English-only listing and examples; README covers both panels and both trademarks.
+
 ## 0.7.0
 
 - Renamed **Riplexa Timestamps for Claude & Codex** (extension id `agurrotem.riplexa-timestamps`; settings and commands now `riplexaTimestamps.*`).

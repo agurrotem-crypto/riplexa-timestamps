@@ -168,7 +168,7 @@ function runCodex(fiberRoot, cssVars = {}) {
 }
 
 test('Codex: user message, assistant message, a command start→end and "Worked for" all get their real time', () => {
-  const userText = el('p', '', [txt('מה מצבך?')]);
+  const userText = el('p', '', [txt('What is the status?')]);
   const userHost = el('div', 'group', [el('div', 'bubble', [userText])]);
   const assistantText = el('p', '', [txt('The data, tags and reports are saved.')]);
   const actionRow = el('div', 'turn-action-controls', [el('button', '', [txt('Copy')])]);
