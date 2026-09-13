@@ -1,6 +1,6 @@
 'use strict';
 /*
- * Riplexa VS Timestamp — the Codex (OpenAI ChatGPT extension) panel adapter.
+ * Riplexa Timestamps — the Codex (OpenAI ChatGPT extension) panel adapter.
  *
  * Codex builds its panel from webview/index.html on disk every time the panel opens, and its security policy allows
  * scripts, stylesheets and images from the panel's own folder. So nothing in Codex's code is edited: one marked
@@ -33,7 +33,7 @@ const BACKUP_SUFFIX = '.riplexa-vs-timestamp.bak';
 
 const BLOCK = `${OPEN}<script src="./assets/${LOADER_FILE}" defer></script>${CLOSE}`;
 
-const LOADER = `/* Riplexa VS Timestamp — Codex loader (stable; loads the current main script) */
+const LOADER = `/* Riplexa Timestamps — Codex loader (stable; loads the current main script) */
 ;(function(){try{
   if (window.__riplexaTsCodexLoader) return; window.__riplexaTsCodexLoader = true;
   var me = document.currentScript && document.currentScript.src;
@@ -57,7 +57,7 @@ const LOADER = `/* Riplexa VS Timestamp — Codex loader (stable; loads the curr
 }catch(e){}})();
 `;
 
-const SCRIPT = `/* Riplexa VS Timestamp — Codex panel script */
+const SCRIPT = `/* Riplexa Timestamps — Codex panel script */
 ;(function(){try{
   var prev = window.__riplexaTsCodex; if (prev && prev.stop) { try { prev.stop(); } catch (e) {} }
   var ATTR = ${JSON.stringify(live.ATTR)};
@@ -96,14 +96,6 @@ ${live.pageRuntime()}
     var cls = String(el.className || '').split(/\\s+/).slice(0, 2).join('.');
     return (el.tagName || '?') + (cls ? '.' + cls : '') + ' "' + String(el.textContent || '').trim().slice(0, 28) + '"';
   };
-  var textBefore = function(el){
-    for (var up = el, lvl = 0; up && lvl < 4; up = up.parentElement, lvl++) {
-      for (var s = up.previousElementSibling; s; s = s.previousElementSibling) {
-        if (String(s.textContent || '').trim() !== '') return s;
-      }
-    }
-    return null;
-  };
   var itemTimes = function(it){
     var start = typeof it.startedAtMs === 'number' ? it.startedAtMs : null;
     var end = typeof it.completedAtMs === 'number' ? it.completedAtMs
@@ -115,27 +107,12 @@ ${live.pageRuntime()}
     var v = fmt(t.start);
     return t.end != null && t.end >= t.start ? v + '\\u2192' + fmt(t.end).replace(/^\\d\\d\\/\\d\\d /, '') : v;
   };
-  // Earliest start / latest end of every timed item inside a group's data (bounded walk, data objects only).
-  var groupTimes = function(rootObj){
-    var starts = [], ends = [], open = false, seen = 0, stack = [[rootObj, 0]], visited = new Set();
-    while (stack.length && seen++ < 800) {
-      var pair = stack.pop(), o = pair[0], d = pair[1];
-      if (!o || typeof o !== 'object' || visited.has(o) || o.$$typeof || o.nodeType) continue;
-      visited.add(o);
-      if (typeof o.startedAtMs === 'number') { var t = itemTimes(o); starts.push(t.start); if (t.end != null) ends.push(t.end); else open = true; }
-      if (d >= 5) continue;
-      if (Array.isArray(o)) { for (var i = 0; i < o.length; i++) stack.push([o[i], d + 1]); }
-      else for (var k in o) { var v = o[k]; if (v && typeof v === 'object') stack.push([v, d + 1]); }
-    }
-    if (!starts.length) return null;
-    return { start: Math.min.apply(null, starts), end: open || !ends.length ? null : Math.max.apply(null, ends) };
-  };
   var stamp = function(){
-    var dbg = ['Riplexa VS Timestamp (Codex) - diagnostics'];
+    var dbg = ['Riplexa Timestamps (Codex) - diagnostics'];
     if (!isOn()) { sweep(); debug(dbg.concat('timestamps: off')); return; }
     var root = rootFiber();
     if (!root) { sweep(); debug(dbg.concat('react root: NOT FOUND')); return; }
-    var c = { fibers: 0, user: 0, final: 0, worked: 0, groups: 0 }, items = {}, noTime = {}, samples = {};
+    var c = { fibers: 0, user: 0, worked: 0 }, items = {}, noTime = {}, samples = {};
     // Several fibers (memo/forwardRef wrappers) render the same host: count and mark each host once per kind per pass.
     var seenThisPass = new Map();
     var once = function(kind, host){
@@ -153,9 +130,6 @@ ${live.pageRuntime()}
         if (typeof p.sentAtMs === 'number' && 'message' in p && ('messageContent' in p || 'onEditMessage' in p || 'senderAccountUserId' in p)) {
           var uh = hostOf(node);
           if (uh && once('user', uh)) { c.user++; set(uh, fmt(p.sentAtMs)); markUser(uh); samples.user = samples.user || snippet(textLineOf(uh) || uh); }
-        } else if (typeof p.sentAtMs === 'number' && 'turnId' in p && ('copyText' in p || 'getCopyText' in p || 'onCopyText' in p)) {
-          var ah = hostOf(node), at = ah && textBefore(ah);
-          if (at && once('final', at)) { c.final++; set(at, fmt(p.sentAtMs)); samples.final = samples.final || snippet(textLineOf(at) || at); }
         } else if (it && it.type === 'assistant-message') {
           var mh = hostOf(node);
           if (mh && once('am', mh)) {
@@ -167,13 +141,6 @@ ${live.pageRuntime()}
           if (ih && once('item', ih)) {
             if (typeof it.startedAtMs === 'number') { items[it.type] = (items[it.type] || 0) + 1; set(ih, range(itemTimes(it))); samples['item:' + it.type] = samples['item:' + it.type] || snippet(textLineOf(ih) || ih); }
             else noTime[it.type] = (noTime[it.type] || 0) + 1;
-          }
-        } else if (Array.isArray(p.units) && 'completedHeader' in p) {
-          var gh = hostOf(node);
-          if (gh && once('group', gh)) {
-            var gt = groupTimes(p.units);
-            if (gt) { c.groups++; set(gh, range(gt)); samples.group = samples.group || snippet(textLineOf(gh) || gh); }
-            else noTime.group = (noTime.group || 0) + 1;
           }
         } else if (typeof p.startedAtMs === 'number' && 'status' in p) {
           var wh = hostOf(node);
@@ -188,7 +155,7 @@ ${live.pageRuntime()}
     var list = function(o){ return Object.keys(o).map(function(k){ return k + ':' + o[k]; }).join(' ') || 'none'; };
     debug(dbg.concat(
       'react root: found, fibers scanned: ' + c.fibers,
-      'user: ' + c.user + '  final answers: ' + c.final + '  groups: ' + c.groups + '  worked-for: ' + c.worked,
+      'user: ' + c.user + '  worked-for: ' + c.worked,
       'timed items: ' + list(items),
       'no time in data: ' + list(noTime),
       Object.keys(samples).map(function(k){ return '  ' + k + ' -> ' + samples[k]; }).join('\\n')

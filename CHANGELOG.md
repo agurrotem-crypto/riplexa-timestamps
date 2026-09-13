@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0
+
+- Renamed **Riplexa Timestamps for Claude & Codex** (extension id `agurrotem.riplexa-timestamps`; settings and commands now `riplexaTimestamps.*`).
+- Codex: times are placed only on the row that owns them. The final-answer time is no longer inferred from the action row (it once landed on an "Edited …" row), and a whole activity block is no longer stamped over its first line.
+
 ## 0.6.0
 
 - Codex: intermediate assistant messages get their time when Codex recorded one (`sentAtMs`); the diagnostics box counts the ones Codex did not.

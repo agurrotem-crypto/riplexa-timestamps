@@ -1,6 +1,6 @@
-# Riplexa VS Timestamp
+# Riplexa Timestamps for Claude & Codex
 
-**See when everything happened in your AI chat panels — Claude Code and Codex.** Every message you send, every reply, every thinking block and every tool call gets its real time, inline on the text line.
+**See when everything happened, right inside the conversation.** In the Claude Code and Codex chat panels, every message you send, every reply, every thinking block and every tool call gets its real time, inline at the start of its own text line. There is no side panel and no separate log.
 
 ```
 20:58:57  בדיקה 4                                   ← your message
@@ -30,7 +30,7 @@ The Claude Code extension for VS Code shows no times at all (see [anthropics/cla
 | Claude Code | `anthropic.claude-code` | A marked edit of the panel's `webview/index.js` (see below) |
 | Codex | `openai.chatgpt` | One marked `<script>` line in the panel's `webview/index.html`; Codex's own code is not edited. Codex already keeps the times (it shows some of them only on hover); the script puts them on the text line |
 
-Turn on `riplexaVsTimestamp.diagnostics` to see, inside the Codex panel, what was found and where each time was placed.
+Turn on `riplexaTimestamps.diagnostics` to see, inside the Codex panel, what was found and where each time was placed.
 
 ## How it works
 
@@ -58,19 +58,19 @@ Install, then reload the window (or close and reopen the Claude Code panel) once
 
 | Command | What it does |
 | --- | --- |
-| `Riplexa VS Timestamp: Toggle On/Off` | Same as clicking the status bar item (live) |
-| `Riplexa VS Timestamp: Turn On` / `Turn Off` | Explicit on / off (live) |
-| `Riplexa VS Timestamp: Remove from Claude Code` | Restore Claude Code's original files (reload to finish) |
-| `Riplexa VS Timestamp: Show Status` | Show whether each Claude Code install is patched |
+| `Riplexa Timestamps: Toggle On/Off` | Same as clicking the status bar item (live) |
+| `Riplexa Timestamps: Turn On` / `Turn Off` | Explicit on / off (live) |
+| `Riplexa Timestamps: Remove from Claude Code` | Restore Claude Code's original files (reload to finish) |
+| `Riplexa Timestamps: Show Status` | Show whether each Claude Code install is patched |
 
 Settings (all live):
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `riplexaVsTimestamp.enabled` | `true` | Timestamps on or off |
-| `riplexaVsTimestamp.showStatusBar` | `true` | Show the On/Off toggle in the status bar |
-| `riplexaVsTimestamp.diagnostics` | `false` | Show a diagnostics box in the Codex panel |
-| `riplexaVsTimestamp.userMessageColor` | empty | Text color of your own messages, as a CSS color, e.g. `#90EE90` or `lightgreen`, so your side of the conversation stands out |
+| `riplexaTimestamps.enabled` | `true` | Timestamps on or off |
+| `riplexaTimestamps.showStatusBar` | `true` | Show the On/Off toggle in the status bar |
+| `riplexaTimestamps.diagnostics` | `false` | Show a diagnostics box in the Codex panel |
+| `riplexaTimestamps.userMessageColor` | empty | Text color of your own messages, as a CSS color, e.g. `#90EE90` or `lightgreen`, so your side of the conversation stands out |
 
 **After Claude Code updates**, the new version is patched automatically, and you are asked to reload once.
 

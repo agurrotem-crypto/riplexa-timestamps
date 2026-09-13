@@ -192,7 +192,7 @@ test('Codex: user message, assistant message, a command start→end and "Worked 
   runCodex(root);
   assert.equal(ts(userText), '22:17:04');
   assert.equal(userHost._a['data-riplexa-user'], '1', 'marked for the user color');
-  assert.equal(ts(assistantText), '22:17:30', 'the assistant time goes on its text, not the hidden hover row');
+  assert.equal(ts(assistantText), null, 'the action row time is never guessed onto a neighbouring row (it once landed on "Edited …")');
   assert.equal(ts(cmdLabel), '22:17:10→22:17:12');
   assert.equal(ts(workedLabel), '22:17:04→22:17:30');
   assert.equal(ts(pendingLabel), '22:17:20', 'still running: start only');
@@ -237,21 +237,12 @@ test('Codex: intermediate assistant messages get their time when Codex kept one,
   assert.match(box.textContent, /no time in data: assistant-message:1/);
 });
 
-test('Codex: a collapsed "Ran commands" group shows the first start and the last end of its commands', () => {
-  const header = el('span', '', [txt('Ran commands')]);
-  const openHeader = el('span', '', [txt('Running commands')]);
-  const units = [
-    { kind: 'commands', item: { type: 'exec', startedAtMs: today(22, 24, 0), completedAtMs: today(22, 24, 1) } },
-    { kind: 'commands', items: [{ type: 'exec', startedAtMs: today(22, 23, 50), completedAtMs: today(22, 23, 58) }] },
-  ];
-  const openUnits = [{ item: { type: 'exec', startedAtMs: today(22, 25, 0), completedAtMs: today(22, 25, 2) } }, { item: { type: 'exec', startedAtMs: today(22, 25, 3) } }];
-  const root = chain([
-    [{ units, completedHeader: { summaryParts: [] } }, el('div', 'group', [header])],
-    [{ units: openUnits, completedHeader: undefined }, el('div', 'group', [openHeader])],
-  ]);
+test('Codex: an activity block is not stamped as a whole, so its first line keeps its own time', () => {
+  const header = el('span', '', [txt('Working for 43s')]);
+  const units = [{ kind: 'standalone', item: { item: { type: 'exec', startedAtMs: today(22, 24, 0), completedAtMs: today(22, 24, 1) } } }];
+  const root = chain([[{ units, completedHeader: { summaryParts: [] } }, el('div', 'group', [header])]]);
   runCodex(root);
-  assert.equal(ts(header), '22:23:50→22:24:01');
-  assert.equal(ts(openHeader), '22:25:00', 'a command still running: the group shows its start only');
+  assert.equal(ts(header), null, 'measured on 2026-09-13: the block range landed on "Working for 43s"');
 });
 
 test('Codex: a newer main script takes over cleanly — the old one stops its observer and timer', () => {

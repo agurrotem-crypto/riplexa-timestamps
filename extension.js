@@ -6,11 +6,11 @@ const live = require('./src/live');
 // One adapter per chat panel. Each knows how to find its host extension's installs, apply, restore and report.
 const ADAPTERS = [require('./src/patcher'), require('./src/codex')];
 
-const SETTING = 'riplexaVsTimestamp.enabled';
-const COLOR_SETTING = 'riplexaVsTimestamp.userMessageColor';
-const STATUS_BAR_SETTING = 'riplexaVsTimestamp.showStatusBar';
-const DEBUG_SETTING = 'riplexaVsTimestamp.diagnostics';
-const REMOVED_KEY = 'riplexaVsTimestamp.removed';
+const SETTING = 'riplexaTimestamps.enabled';
+const COLOR_SETTING = 'riplexaTimestamps.userMessageColor';
+const STATUS_BAR_SETTING = 'riplexaTimestamps.showStatusBar';
+const DEBUG_SETTING = 'riplexaTimestamps.diagnostics';
+const REMOVED_KEY = 'riplexaTimestamps.removed';
 
 /** Every install of this adapter's host extension: the active one plus sibling versions in the same folder. */
 function installs(adapter) {
@@ -29,7 +29,7 @@ async function offerReload(text) {
 }
 
 function activate(context) {
-  const log = vscode.window.createOutputChannel('Riplexa VS Timestamp');
+  const log = vscode.window.createOutputChannel('Riplexa Timestamps');
   context.subscriptions.push(log);
   const removed = () => context.globalState.get(REMOVED_KEY, false) === true;
 
@@ -59,20 +59,20 @@ function activate(context) {
         }
       }
     }
-    if (!found && interactive) vscode.window.showWarningMessage('Riplexa VS Timestamp: no supported chat panel (Claude Code, Codex) is installed.');
-    if (problems.length) vscode.window.showWarningMessage('Riplexa VS Timestamp: ' + problems.join(' | '));
-    if (patchedPanels.length) offerReload(`Riplexa VS Timestamp is installed in ${patchedPanels.join(' and ')}. Reload the window (or reopen the panel) once to start; after that, On/Off and colors change live.`);
-    if (restoredPanels.length) offerReload(`Riplexa VS Timestamp was removed from ${restoredPanels.join(' and ')}. Reload the window to finish.`);
+    if (!found && interactive) vscode.window.showWarningMessage('Riplexa Timestamps: no supported chat panel (Claude Code, Codex) is installed.');
+    if (problems.length) vscode.window.showWarningMessage('Riplexa Timestamps: ' + problems.join(' | '));
+    if (patchedPanels.length) offerReload(`Riplexa Timestamps is installed in ${patchedPanels.join(' and ')}. Reload the window (or reopen the panel) once to start; after that, On/Off and colors change live.`);
+    if (restoredPanels.length) offerReload(`Riplexa Timestamps was removed from ${restoredPanels.join(' and ')}. Reload the window to finish.`);
   }
 
   // Status bar toggle: shows On/Off and flips it on click.
-  const bar = vscode.window.createStatusBarItem('riplexaVsTimestamp.toggle', vscode.StatusBarAlignment.Left, 50);
-  bar.name = 'Riplexa VS Timestamp';
-  bar.command = 'riplexaVsTimestamp.toggle';
+  const bar = vscode.window.createStatusBarItem('riplexaTimestamps.toggle', vscode.StatusBarAlignment.Left, 50);
+  bar.name = 'Riplexa Timestamps';
+  bar.command = 'riplexaTimestamps.toggle';
   const renderBar = () => {
     const on = enabled() && !removed();
     bar.text = on ? '$(clock) Timestamp: On' : '$(circle-slash) Timestamp: Off';
-    bar.tooltip = on ? 'Riplexa VS Timestamp is ON — click to turn it off' : 'Riplexa VS Timestamp is OFF — click to turn it on';
+    bar.tooltip = on ? 'Riplexa Timestamps is ON — click to turn it off' : 'Riplexa Timestamps is OFF — click to turn it on';
     if (cfg().get(STATUS_BAR_SETTING, true)) bar.show(); else bar.hide();
   };
   context.subscriptions.push(bar);
@@ -84,24 +84,24 @@ function activate(context) {
   };
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('riplexaVsTimestamp.enable', () => setEnabled(true)),
-    vscode.commands.registerCommand('riplexaVsTimestamp.disable', () => setEnabled(false)),
-    vscode.commands.registerCommand('riplexaVsTimestamp.toggle', () => setEnabled(!(enabled() && !removed()))),
-    vscode.commands.registerCommand('riplexaVsTimestamp.remove', async () => {
+    vscode.commands.registerCommand('riplexaTimestamps.enable', () => setEnabled(true)),
+    vscode.commands.registerCommand('riplexaTimestamps.disable', () => setEnabled(false)),
+    vscode.commands.registerCommand('riplexaTimestamps.toggle', () => setEnabled(!(enabled() && !removed()))),
+    vscode.commands.registerCommand('riplexaTimestamps.remove', async () => {
       await context.globalState.update(REMOVED_KEY, true);
       renderBar();
       await sync({ interactive: true });
     }),
-    vscode.commands.registerCommand('riplexaVsTimestamp.status', () => {
+    vscode.commands.registerCommand('riplexaTimestamps.status', () => {
       const lines = [];
       for (const adapter of ADAPTERS) for (const d of installs(adapter)) lines.push(`${adapter.name} ${path.basename(d)}: ${adapter.status(d)}`);
-      vscode.window.showInformationMessage('Riplexa VS Timestamp — ' + (lines.join(' | ') || 'no supported panel installed') + (removed() ? ' (removed)' : ''));
+      vscode.window.showInformationMessage('Riplexa Timestamps — ' + (lines.join(' | ') || 'no supported panel installed') + (removed() ? ' (removed)' : ''));
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration(SETTING) || e.affectsConfiguration(STATUS_BAR_SETTING)) renderBar();
       if (![SETTING, COLOR_SETTING, DEBUG_SETTING].some((k) => e.affectsConfiguration(k))) return;
       const c = cfg().get(COLOR_SETTING, '');
-      if (c && !live.safeColor(c)) vscode.window.showWarningMessage(`Riplexa VS Timestamp: "${c}" is not a CSS color (use e.g. #90EE90, lightgreen or rgb(144,238,144)); your message color is left unchanged.`);
+      if (c && !live.safeColor(c)) vscode.window.showWarningMessage(`Riplexa Timestamps: "${c}" is not a CSS color (use e.g. #90EE90, lightgreen or rgb(144,238,144)); your message color is left unchanged.`);
       sync();
     }),
     // Host extension updates arrive as a new folder: patch it as soon as it appears.

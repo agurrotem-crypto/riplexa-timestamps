@@ -28,7 +28,7 @@ function liveCss(opts = {}) {
   const on = opts.enabled !== false;
   const color = safeColor(opts.userColor);
   const sel = opts.userSelector || '[class*="userMessage_"]';
-  let css = `/* Riplexa VS Timestamp live settings - written by the extension */\n:root{--riplexa-ts-on:${on ? 1 : 0};--riplexa-ts-debug:${opts.debug ? 1 : 0};}\n`;
+  let css = `/* Riplexa Timestamps live settings - written by the extension */\n:root{--riplexa-ts-on:${on ? 1 : 0};--riplexa-ts-debug:${opts.debug ? 1 : 0};}\n`;
   if (on) css += STAMP_CSS + '\n';
   if (color) css += `${sel},${sel} *{color:${color} !important;}\n`;
   return css;

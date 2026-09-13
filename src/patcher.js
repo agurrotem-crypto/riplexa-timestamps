@@ -1,6 +1,6 @@
 'use strict';
 /*
- * Riplexa VS Timestamp — the Claude Code panel patcher.
+ * Riplexa Timestamps — the Claude Code panel patcher.
  *
  * Claude Code's VS Code panel is a webview bundled as webview/index.js inside the Claude Code extension. It shows no
  * times at all, although every message it receives from the CLI carries the transcript's ISO `timestamp`. This module

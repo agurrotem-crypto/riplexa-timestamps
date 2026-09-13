@@ -1,8 +1,8 @@
 {
-  "name": "riplexa-vs-timestamp",
-  "displayName": "Riplexa VS Timestamp",
-  "description": "Shows the real time on every message, reply and tool call inside the Claude Code and Codex chat panels — inline on the text line, start→result on tools. On/Off and colors change live.",
-  "version": "0.6.0",
+  "name": "riplexa-timestamps",
+  "displayName": "Riplexa Timestamps for Claude & Codex",
+  "description": "Real timestamps inline, right inside the conversation, in the Claude Code and Codex chat panels — on every message you send, every reply, and every tool call (start→end). Not a side panel. On/Off and colors change live.",
+  "version": "0.7.0",
   "publisher": "agurrotem",
   "license": "MIT",
   "engines": {
@@ -32,48 +32,48 @@
   "contributes": {
     "commands": [
       {
-        "command": "riplexaVsTimestamp.toggle",
-        "title": "Riplexa VS Timestamp: Toggle On/Off"
+        "command": "riplexaTimestamps.toggle",
+        "title": "Riplexa Timestamps: Toggle On/Off"
       },
       {
-        "command": "riplexaVsTimestamp.enable",
-        "title": "Riplexa VS Timestamp: Turn On"
+        "command": "riplexaTimestamps.enable",
+        "title": "Riplexa Timestamps: Turn On"
       },
       {
-        "command": "riplexaVsTimestamp.disable",
-        "title": "Riplexa VS Timestamp: Turn Off"
+        "command": "riplexaTimestamps.disable",
+        "title": "Riplexa Timestamps: Turn Off"
       },
       {
-        "command": "riplexaVsTimestamp.remove",
-        "title": "Riplexa VS Timestamp: Remove from chat panels (restore original files)"
+        "command": "riplexaTimestamps.remove",
+        "title": "Riplexa Timestamps: Remove from chat panels (restore original files)"
       },
       {
-        "command": "riplexaVsTimestamp.status",
-        "title": "Riplexa VS Timestamp: Show Status"
+        "command": "riplexaTimestamps.status",
+        "title": "Riplexa Timestamps: Show Status"
       }
     ],
     "configuration": {
-      "title": "Riplexa VS Timestamp",
+      "title": "Riplexa Timestamps",
       "properties": {
-        "riplexaVsTimestamp.enabled": {
+        "riplexaTimestamps.enabled": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show real timestamps in the Claude Code and Codex chat panels. Changes apply live, without a reload."
         },
-        "riplexaVsTimestamp.diagnostics": {
+        "riplexaTimestamps.diagnostics": {
           "type": "boolean",
           "default": false,
           "markdownDescription": "Show a small diagnostics box in the Codex panel: what the extension found (messages, commands, items) and where it placed each time. Use it when a panel shows no times, and include a screenshot in a bug report. Live."
         },
-        "riplexaVsTimestamp.showStatusBar": {
+        "riplexaTimestamps.showStatusBar": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show the **Timestamp: On/Off** toggle in the status bar."
         },
-        "riplexaVsTimestamp.userMessageColor": {
+        "riplexaTimestamps.userMessageColor": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Text color of **your own messages** in the Claude Code chat panel, as a CSS color — e.g. `#90EE90`, `lightgreen`, `rgb(144,238,144)`. Leave empty to keep Claude Code's color. Changes apply live."
+          "markdownDescription": "Text color of **your own messages** in the Claude Code and Codex chat panels, as a CSS color — e.g. `#90EE90`, `lightgreen`, `rgb(144,238,144)`. Leave empty to keep the panel's own color. Changes apply live."
         }
       }
     }
