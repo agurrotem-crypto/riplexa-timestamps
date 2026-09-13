@@ -43,8 +43,11 @@ Safety:
 
 Install, then reload the window (or close and reopen the Claude Code panel) when prompted.
 
+**Status bar toggle:** `Timestamp: On` / `Timestamp: Off` at the bottom of the window. Click it to switch.
+
 | Command | What it does |
 | --- | --- |
+| `Riplexa VS Timestamp: Toggle On/Off` | Same as clicking the status bar item |
 | `Riplexa VS Timestamp: Enable` | Apply the patch (it is on by default) |
 | `Riplexa VS Timestamp: Disable` | Restore Claude Code's original panel |
 | `Riplexa VS Timestamp: Show Status` | Show whether each Claude Code install is patched |
@@ -54,6 +57,7 @@ Settings:
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `riplexaVsTimestamp.enabled` | `true` | Timestamps on or off (off restores the original panel) |
+| `riplexaVsTimestamp.showStatusBar` | `true` | Show the On/Off toggle in the status bar |
 | `riplexaVsTimestamp.userMessageColor` | empty | Text color of your own messages, as a CSS color, e.g. `#90EE90` or `lightgreen`, so your side of the conversation stands out |
 
 **After Claude Code updates**, the new version is patched automatically, and you are asked to reload once.

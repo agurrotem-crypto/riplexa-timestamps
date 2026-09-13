@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+
+- Status bar toggle `Timestamp: On/Off` (click to switch) and the command `Riplexa VS Timestamp: Toggle On/Off`.
+- Setting `riplexaVsTimestamp.showStatusBar` to hide the toggle.
+
 ## 0.2.0
 
 - New setting `riplexaVsTimestamp.userMessageColor`: color your own messages (any plain CSS color; anything else is refused).

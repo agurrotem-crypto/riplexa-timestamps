@@ -2,7 +2,7 @@
   "name": "riplexa-vs-timestamp",
   "displayName": "Riplexa VS Timestamp",
   "description": "Shows the real time on every message, reply and tool call inside the Claude Code chat panel — inline on the text line, start→result on tools.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "agurrotem",
   "license": "MIT",
   "engines": {
@@ -37,6 +37,10 @@
         "title": "Riplexa VS Timestamp: Disable (restore original Claude Code panel)"
       },
       {
+        "command": "riplexaVsTimestamp.toggle",
+        "title": "Riplexa VS Timestamp: Toggle On/Off"
+      },
+      {
         "command": "riplexaVsTimestamp.status",
         "title": "Riplexa VS Timestamp: Show Status"
       }
@@ -49,6 +53,11 @@
           "default": true,
           "markdownDescription": "Show real timestamps in the Claude Code chat panel. Turning this off restores Claude Code's original panel file (reload the window afterwards)."
         },
+        "riplexaVsTimestamp.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show the **Timestamp: On/Off** toggle in the status bar."
+        },
         "riplexaVsTimestamp.userMessageColor": {
           "type": "string",
           "default": "",
@@ -58,7 +67,7 @@
     }
   },
   "scripts": {
-    "test": "node --test test/patcher.test.js",
+    "test": "node --test test/patcher.test.js test/extension.test.js",
     "package": "vsce package",
     "vscode:uninstall": "node ./uninstall.js"
   }
