@@ -4,39 +4,70 @@
  *
  * Codex builds its panel from webview/index.html on disk every time the panel opens, and its security policy allows
  * scripts, stylesheets and images from the panel's own folder. So nothing in Codex's code is edited: one marked
- * block is inserted before </head> that loads our script, and the script reads the times Codex already keeps —
- *   • `sentAtMs` on the user message and on the assistant message actions (Codex shows them only on hover),
- *   • `startedAtMs` / `completedAtMs` (or `durationMs`) on work items: commands, file edits, tool calls, "Worked for".
+ * line before </head> loads a small, STABLE loader. The loader polls a one-pixel SVG whose width is the version of
+ * the main script and (re)loads the main script when it changes — so a new version of this extension reaches an
+ * open Codex panel with no reload. The main script reads the times Codex already keeps:
+ *   • `sentAtMs` on the user message and on assistant messages (Codex shows some of them only on hover),
+ *   • `startedAtMs` / `completedAtMs` (or `durationMs`) on work items: commands, file edits, tool calls, "Worked for",
+ *   • the earliest start and latest end of the items inside a collapsed group ("Ran commands").
  * It finds them by walking React's fiber tree from the root and marks the first text line of the element each one
- * renders. A row without a real time gets nothing.
+ * renders. A row without a real time gets nothing; the diagnostics box counts those too.
  *
- * Live settings (on/off, colors, a diagnostics overlay) come from the same stylesheet + revision-image mechanism as
- * the Claude Code adapter, in webview/assets/. The untouched index.html is kept beside it and restored on Remove.
+ * Live settings (on/off, colors, diagnostics) come from the shared stylesheet mechanism (src/live.js), in
+ * webview/assets/. The untouched index.html is kept beside it and restored on Remove.
  */
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const live = require('./live');
 
-const VERSION = 1;
+const VERSION = 2;
 const OPEN = `<!-- RIPLEXA-VS-TIMESTAMP v${VERSION} -->`;
 const ANY_OPEN = '<!-- RIPLEXA-VS-TIMESTAMP v';
 const CLOSE = '<!-- /RIPLEXA-VS-TIMESTAMP -->';
+const LOADER_FILE = 'riplexa-vs-timestamp-codex-loader.js';
 const SCRIPT_FILE = 'riplexa-vs-timestamp-codex.js';
+const SCRIPT_VER_FILE = 'riplexa-vs-timestamp-codex.ver.svg';
+const LEGACY_FILES = ['riplexa-vs-timestamp-codex.js'];
 const BACKUP_SUFFIX = '.riplexa-vs-timestamp.bak';
 
-const BLOCK = `${OPEN}<script src="./assets/${SCRIPT_FILE}" defer></script>${CLOSE}`;
+const BLOCK = `${OPEN}<script src="./assets/${LOADER_FILE}" defer></script>${CLOSE}`;
 
-const SCRIPT = `/* Riplexa VS Timestamp — Codex panel script v${VERSION} */
+const LOADER = `/* Riplexa VS Timestamp — Codex loader (stable; loads the current main script) */
 ;(function(){try{
-  if (window.__riplexaVsTimestampCodex) return; window.__riplexaVsTimestampCodex = true;
-  var ATTR = ${JSON.stringify(live.ATTR)}, USER_ATTR = 'data-riplexa-user';
+  if (window.__riplexaTsCodexLoader) return; window.__riplexaTsCodexLoader = true;
+  var me = document.currentScript && document.currentScript.src;
+  var base = me ? String(me).replace(/[^/]*([?#].*)?$/, '') : null;
+  if (!base) return;
+  var current = -1, tag = null;
+  var load = function(rev){
+    var s = document.createElement('script');
+    s.src = base + ${JSON.stringify(SCRIPT_FILE)} + '?v=' + rev;
+    s.onload = function(){ if (tag && tag !== s && tag.parentNode) tag.parentNode.removeChild(tag); tag = s; };
+    (document.head || document.documentElement).appendChild(s);
+  };
+  var probe = function(){
+    var img = new Image();
+    img.onload = function(){ var w = img.naturalWidth; if (w !== current) { current = w; load(w); } };
+    img.onerror = function(){ if (current === -1) { current = 0; load(0); } };
+    img.src = base + ${JSON.stringify(SCRIPT_VER_FILE)} + '?t=' + Date.now();
+  };
+  probe();
+  setInterval(probe, 3000);
+}catch(e){}})();
+`;
+
+const SCRIPT = `/* Riplexa VS Timestamp — Codex panel script */
+;(function(){try{
+  var prev = window.__riplexaTsCodex; if (prev && prev.stop) { try { prev.stop(); } catch (e) {} }
+  var ATTR = ${JSON.stringify(live.ATTR)};
   var me = document.currentScript && document.currentScript.src;
   var base = me ? String(me).replace(/[^/]*([?#].*)?$/, '') : null;
 ${live.pageRuntime()}
   var dbgEl = null;
+  var removeDebug = function(){ if (dbgEl && dbgEl.parentNode) dbgEl.parentNode.removeChild(dbgEl); dbgEl = null; };
   var debug = function(lines){
-    if (!isDebug()) { if (dbgEl && dbgEl.parentNode) dbgEl.parentNode.removeChild(dbgEl); dbgEl = null; return; }
+    if (!isDebug()) { removeDebug(); return; }
     if (!dbgEl) {
       dbgEl = document.createElement('div');
       dbgEl.setAttribute('style', 'position:fixed;left:6px;bottom:6px;z-index:2147483647;max-width:70vw;padding:6px 8px;'
@@ -80,33 +111,73 @@ ${live.pageRuntime()}
     return { start: start, end: end };
   };
   var range = function(t){
-    if (t.start == null) return '';
+    if (!t || t.start == null) return '';
     var v = fmt(t.start);
     return t.end != null && t.end >= t.start ? v + '\\u2192' + fmt(t.end).replace(/^\\d\\d\\/\\d\\d /, '') : v;
+  };
+  // Earliest start / latest end of every timed item inside a group's data (bounded walk, data objects only).
+  var groupTimes = function(rootObj){
+    var starts = [], ends = [], open = false, seen = 0, stack = [[rootObj, 0]], visited = new Set();
+    while (stack.length && seen++ < 800) {
+      var pair = stack.pop(), o = pair[0], d = pair[1];
+      if (!o || typeof o !== 'object' || visited.has(o) || o.$$typeof || o.nodeType) continue;
+      visited.add(o);
+      if (typeof o.startedAtMs === 'number') { var t = itemTimes(o); starts.push(t.start); if (t.end != null) ends.push(t.end); else open = true; }
+      if (d >= 5) continue;
+      if (Array.isArray(o)) { for (var i = 0; i < o.length; i++) stack.push([o[i], d + 1]); }
+      else for (var k in o) { var v = o[k]; if (v && typeof v === 'object') stack.push([v, d + 1]); }
+    }
+    if (!starts.length) return null;
+    return { start: Math.min.apply(null, starts), end: open || !ends.length ? null : Math.max.apply(null, ends) };
   };
   var stamp = function(){
     var dbg = ['Riplexa VS Timestamp (Codex) - diagnostics'];
     if (!isOn()) { sweep(); debug(dbg.concat('timestamps: off')); return; }
     var root = rootFiber();
     if (!root) { sweep(); debug(dbg.concat('react root: NOT FOUND')); return; }
-    var counts = { fibers: 0, user: 0, assistant: 0, worked: 0 }, items = {}, samples = {}, users = new Set();
+    var c = { fibers: 0, user: 0, final: 0, worked: 0, groups: 0 }, items = {}, noTime = {}, samples = {};
+    // Several fibers (memo/forwardRef wrappers) render the same host: count and mark each host once per kind per pass.
+    var seenThisPass = new Map();
+    var once = function(kind, host){
+      if (!host) return false;
+      var s = seenThisPass.get(host); if (!s) { s = {}; seenThisPass.set(host, s); }
+      if (s[kind]) return false; s[kind] = true; return true;
+    };
     var node = root.child, guard = 0;
     while (node && guard++ < 80000) {
-      counts.fibers++;
+      c.fibers++;
       var p = node.memoizedProps;
       if (p && typeof p === 'object') {
+        var it = (p.item && typeof p.item === 'object' && typeof p.item.type === 'string') ? p.item
+          : (p.activityItem && typeof p.activityItem === 'object' && typeof p.activityItem.type === 'string') ? p.activityItem : null;
         if (typeof p.sentAtMs === 'number' && 'message' in p && ('messageContent' in p || 'onEditMessage' in p || 'senderAccountUserId' in p)) {
           var uh = hostOf(node);
-          if (uh && !users.has(uh)) { users.add(uh); counts.user++; set(uh, fmt(p.sentAtMs)); markUser(uh); samples.user = samples.user || snippet(textLineOf(uh) || uh); }
+          if (uh && once('user', uh)) { c.user++; set(uh, fmt(p.sentAtMs)); markUser(uh); samples.user = samples.user || snippet(textLineOf(uh) || uh); }
         } else if (typeof p.sentAtMs === 'number' && 'turnId' in p && ('copyText' in p || 'getCopyText' in p || 'onCopyText' in p)) {
           var ah = hostOf(node), at = ah && textBefore(ah);
-          if (at) { counts.assistant++; set(at, fmt(p.sentAtMs)); samples.assistant = samples.assistant || snippet(textLineOf(at) || at); }
-        } else if (p.item && typeof p.item === 'object' && typeof p.item.type === 'string' && typeof p.item.startedAtMs === 'number') {
+          if (at && once('final', at)) { c.final++; set(at, fmt(p.sentAtMs)); samples.final = samples.final || snippet(textLineOf(at) || at); }
+        } else if (it && it.type === 'assistant-message') {
+          var mh = hostOf(node);
+          if (mh && once('am', mh)) {
+            if (typeof it.sentAtMs === 'number') { items['assistant-message'] = (items['assistant-message'] || 0) + 1; set(mh, fmt(it.sentAtMs)); samples.assistant = samples.assistant || snippet(textLineOf(mh) || mh); }
+            else noTime['assistant-message'] = (noTime['assistant-message'] || 0) + 1;
+          }
+        } else if (it) {
           var ih = hostOf(node);
-          if (ih) { items[p.item.type] = (items[p.item.type] || 0) + 1; set(ih, range(itemTimes(p.item))); samples['item:' + p.item.type] = samples['item:' + p.item.type] || snippet(textLineOf(ih) || ih); }
-        } else if (typeof p.startedAtMs === 'number' && 'status' in p && !('item' in p)) {
+          if (ih && once('item', ih)) {
+            if (typeof it.startedAtMs === 'number') { items[it.type] = (items[it.type] || 0) + 1; set(ih, range(itemTimes(it))); samples['item:' + it.type] = samples['item:' + it.type] || snippet(textLineOf(ih) || ih); }
+            else noTime[it.type] = (noTime[it.type] || 0) + 1;
+          }
+        } else if (Array.isArray(p.units) && 'completedHeader' in p) {
+          var gh = hostOf(node);
+          if (gh && once('group', gh)) {
+            var gt = groupTimes(p.units);
+            if (gt) { c.groups++; set(gh, range(gt)); samples.group = samples.group || snippet(textLineOf(gh) || gh); }
+            else noTime.group = (noTime.group || 0) + 1;
+          }
+        } else if (typeof p.startedAtMs === 'number' && 'status' in p) {
           var wh = hostOf(node);
-          if (wh) { counts.worked++; set(wh, range(itemTimes(p))); samples.worked = samples.worked || snippet(textLineOf(wh) || wh); }
+          if (wh && once('worked', wh)) { c.worked++; set(wh, range(itemTimes(p))); samples.worked = samples.worked || snippet(textLineOf(wh) || wh); }
         }
       }
       if (node.child) { node = node.child; continue; }
@@ -114,22 +185,26 @@ ${live.pageRuntime()}
       if (node) node = node.sibling;
     }
     sweep();
-    var itemText = Object.keys(items).map(function(k){ return k + ':' + items[k]; }).join(' ') || 'none';
+    var list = function(o){ return Object.keys(o).map(function(k){ return k + ':' + o[k]; }).join(' ') || 'none'; };
     debug(dbg.concat(
-      'react root: found, fibers scanned: ' + counts.fibers,
-      'user messages: ' + counts.user + '  assistant messages: ' + counts.assistant + '  worked-for: ' + counts.worked,
-      'items: ' + itemText,
+      'react root: found, fibers scanned: ' + c.fibers,
+      'user: ' + c.user + '  final answers: ' + c.final + '  groups: ' + c.groups + '  worked-for: ' + c.worked,
+      'timed items: ' + list(items),
+      'no time in data: ' + list(noTime),
       Object.keys(samples).map(function(k){ return '  ' + k + ' -> ' + samples[k]; }).join('\\n')
     ));
   };
+  window.__riplexaTsCodex = { stop: function(){ stopRuntime(); removeDebug(); } };
   start();
 }catch(e){ try { console.error('[riplexa-vs-timestamp]', e); } catch (_) {} }})();
 `;
 
 function webviewDir(extPath) { return path.join(extPath, 'webview'); }
 function htmlFile(extPath) { return path.join(webviewDir(extPath), 'index.html'); }
-function scriptFile(extPath) { return path.join(webviewDir(extPath), 'assets', SCRIPT_FILE); }
 function liveDir(extPath) { return path.join(webviewDir(extPath), 'assets'); }
+function loaderFile(extPath) { return path.join(liveDir(extPath), LOADER_FILE); }
+function scriptFile(extPath) { return path.join(liveDir(extPath), SCRIPT_FILE); }
+function scriptVerFile(extPath) { return path.join(liveDir(extPath), SCRIPT_VER_FILE); }
 
 /** Pure: insert (or replace) our block before </head>. Returns { out } or { error }. */
 function injectHtml(html) {
@@ -143,13 +218,14 @@ function injectHtml(html) {
   return { out: html.replace('</head>', `${BLOCK}\n</head>`) };
 }
 
+const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch (_) { return null; } };
+
+/** 'patched' = the loader block and loader are current (the main script is hot-swapped separately). */
 function status(extPath) {
   const f = htmlFile(extPath);
   if (!fs.existsSync(f)) return 'missing';
-  const html = fs.readFileSync(f, 'utf8');
-  let script = null;
-  try { script = fs.readFileSync(scriptFile(extPath), 'utf8'); } catch (_) {}
-  if (html.includes(BLOCK) && script === SCRIPT) return 'patched';
+  const html = read(f);
+  if (html.includes(BLOCK) && read(loaderFile(extPath)) === LOADER) return 'patched';
   if (html.includes(ANY_OPEN)) return 'outdated';
   return 'clean';
 }
@@ -160,40 +236,55 @@ function writeAtomic(file, text) {
   fs.renameSync(tmp, file);
 }
 
+/** Write the main script and bump its version image only when it changed. Returns true if changed. */
+function writeScript(extPath) {
+  if (read(scriptFile(extPath)) === SCRIPT && fs.existsSync(scriptVerFile(extPath))) return false;
+  let n = 0;
+  const cur = read(scriptVerFile(extPath));
+  if (cur) n = Number((cur.match(/width="(\d+)"/) || [])[1]) || 0;
+  n = (n % 60000) + 1;
+  writeAtomic(scriptFile(extPath), SCRIPT);
+  writeAtomic(scriptVerFile(extPath), `<svg xmlns="http://www.w3.org/2000/svg" width="${n}" height="1"></svg>`);
+  return true;
+}
+
 function apply(extPath, opts = {}) {
   const f = htmlFile(extPath);
   const state = status(extPath);
   if (state === 'missing') return { changed: false, liveChanged: false, message: `Codex webview not found at ${f}` };
+  for (const [name, text] of [[LOADER_FILE, LOADER], [SCRIPT_FILE, SCRIPT]]) {
+    try { new vm.Script(text, { filename: name }); }
+    catch (e) { return { changed: false, liveChanged: false, message: `${name} does not parse: ${e.message}` }; }
+  }
   let changed = false, message = 'already patched';
   if (state !== 'patched') {
-    try { new vm.Script(SCRIPT, { filename: SCRIPT_FILE }); }
-    catch (e) { return { changed: false, liveChanged: false, message: `script does not parse: ${e.message}` }; }
-    const html = fs.readFileSync(f, 'utf8');
+    const html = read(f);
     const r = injectHtml(html);
     if (r.error) return { changed: false, liveChanged: false, message: r.error };
     if (!fs.existsSync(f + BACKUP_SUFFIX) && !html.includes(ANY_OPEN)) fs.writeFileSync(f + BACKUP_SUFFIX, html);
-    writeAtomic(scriptFile(extPath), SCRIPT);
+    writeAtomic(loaderFile(extPath), LOADER);
     writeAtomic(f, r.out);
     changed = true; message = 'patched';
   }
-  const liveChanged = live.writeLive(liveDir(extPath), { ...opts, userSelector: '[data-riplexa-user]' });
-  return { changed, liveChanged, message };
+  const scriptChanged = writeScript(extPath);
+  const cssChanged = live.writeLive(liveDir(extPath), { ...opts, userSelector: '[data-riplexa-user]' });
+  return { changed, liveChanged: scriptChanged || cssChanged, message };
 }
 
 function restore(extPath) {
   const f = htmlFile(extPath);
   live.removeLive(liveDir(extPath));
-  try { fs.unlinkSync(scriptFile(extPath)); } catch (_) {}
+  for (const p of [loaderFile(extPath), scriptFile(extPath), scriptVerFile(extPath)]) { try { fs.unlinkSync(p); } catch (_) {} }
   const backup = f + BACKUP_SUFFIX;
   if (fs.existsSync(backup)) {
-    const original = fs.readFileSync(backup, 'utf8');
+    const original = read(backup);
     if (original.includes(ANY_OPEN)) return { changed: false, message: 'backup is itself patched; not restored' };
     writeAtomic(f, original);
     fs.unlinkSync(backup);
     return { changed: true, message: 'restored' };
   }
-  if (fs.existsSync(f)) {
-    const html = fs.readFileSync(f, 'utf8');
+  const html = read(f);
+  if (html) {
     const a = html.indexOf(ANY_OPEN), b = html.indexOf(CLOSE, a);
     if (a >= 0 && b >= 0) { writeAtomic(f, html.slice(0, a) + html.slice(b + CLOSE.length).replace(/^\n/, '')); return { changed: true, message: 'restored (block removed)' }; }
   }
@@ -206,4 +297,7 @@ function findInstalls(extensionsDir) {
   return names.filter((n) => n.toLowerCase().startsWith('openai.chatgpt-')).map((n) => path.join(extensionsDir, n));
 }
 
-module.exports = { id: 'openai.chatgpt', name: 'Codex', VERSION, BLOCK, SCRIPT, SCRIPT_FILE, BACKUP_SUFFIX, injectHtml, status, apply, restore, findInstalls, htmlFile, scriptFile, liveDir };
+module.exports = {
+  id: 'openai.chatgpt', name: 'Codex', VERSION, BLOCK, LOADER, SCRIPT, LOADER_FILE, SCRIPT_FILE, SCRIPT_VER_FILE, BACKUP_SUFFIX, LEGACY_FILES,
+  injectHtml, status, apply, restore, findInstalls, htmlFile, loaderFile, scriptFile, scriptVerFile, liveDir,
+};

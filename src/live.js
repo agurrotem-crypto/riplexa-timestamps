@@ -131,18 +131,28 @@ function pageRuntime() {
     marked = nextMarked; nextMarked = new Set();
   };
   var markUser = function(el){ if (el && el.setAttribute && !el.hasAttribute('data-riplexa-user')) el.setAttribute('data-riplexa-user', '1'); };
-  var queued = false, last = 0;
-  var run = function(){ queued = false; last = Date.now(); try { stamp(); } catch (e) {} };
+  var queued = false, last = 0, stopped = false, observer = null, timer = null;
+  var run = function(){ queued = false; last = Date.now(); if (stopped) return; try { stamp(); } catch (e) {} };
   var schedule = function(){
-    if (queued) return; queued = true;
+    if (queued || stopped) return; queued = true;
     setTimeout(function(){ requestAnimationFrame(run); }, Math.max(0, 250 - (Date.now() - last)));
   };
   var start = function(){
-    new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    observer = new MutationObserver(schedule);
+    observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
     reloadCss();
     probe();
-    setInterval(probe, ${POLL_MS});
+    timer = setInterval(probe, ${POLL_MS});
     run();
+  };
+  // Tear everything down (a newer script version is taking over): observers, timers, marks and our stylesheets.
+  var stopRuntime = function(){
+    stopped = true;
+    try { if (observer) observer.disconnect(); } catch (e) {}
+    try { if (timer) clearInterval(timer); } catch (e) {}
+    nextMarked = new Set(); sweep();
+    if (sheet && sheet.parentNode) sheet.parentNode.removeChild(sheet);
+    if (fallback && fallback.parentNode) fallback.parentNode.removeChild(fallback);
   };
 `;
 }

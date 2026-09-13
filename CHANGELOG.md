@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- Codex: intermediate assistant messages get their time when Codex recorded one (`sentAtMs`); the diagnostics box counts the ones Codex did not.
+- Codex: collapsed groups ("Ran commands") show the first start and the last end of the commands inside; a group with a command still running shows its start only.
+- Codex: a small stable loader now (re)loads the main script when its version changes, so future updates of this extension reach an open Codex panel without a reload.
+
 ## 0.5.0
 
 - **Codex support** (`openai.chatgpt`): user messages, assistant messages, commands (`start→end`) and "Worked for" get their real time, from the times Codex already keeps. Codex's own code is not edited — one marked script line in its `index.html`, restored on Remove/uninstall.
