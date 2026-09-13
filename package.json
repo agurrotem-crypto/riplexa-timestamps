@@ -1,8 +1,8 @@
 {
   "name": "riplexa-vs-timestamp",
   "displayName": "Riplexa VS Timestamp",
-  "description": "Shows the real time on every message, reply and tool call inside the Claude Code chat panel — inline on the text line, start→result on tools.",
-  "version": "0.3.0",
+  "description": "Shows the real time on every message, reply and tool call inside the Claude Code chat panel — inline on the text line, start→result on tools. On/Off and colors change live.",
+  "version": "0.4.0",
   "publisher": "agurrotem",
   "license": "MIT",
   "engines": {
@@ -29,16 +29,20 @@
   "contributes": {
     "commands": [
       {
+        "command": "riplexaVsTimestamp.toggle",
+        "title": "Riplexa VS Timestamp: Toggle On/Off"
+      },
+      {
         "command": "riplexaVsTimestamp.enable",
-        "title": "Riplexa VS Timestamp: Enable"
+        "title": "Riplexa VS Timestamp: Turn On"
       },
       {
         "command": "riplexaVsTimestamp.disable",
-        "title": "Riplexa VS Timestamp: Disable (restore original Claude Code panel)"
+        "title": "Riplexa VS Timestamp: Turn Off"
       },
       {
-        "command": "riplexaVsTimestamp.toggle",
-        "title": "Riplexa VS Timestamp: Toggle On/Off"
+        "command": "riplexaVsTimestamp.remove",
+        "title": "Riplexa VS Timestamp: Remove from Claude Code (restore original files)"
       },
       {
         "command": "riplexaVsTimestamp.status",
@@ -51,7 +55,7 @@
         "riplexaVsTimestamp.enabled": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Show real timestamps in the Claude Code chat panel. Turning this off restores Claude Code's original panel file (reload the window afterwards)."
+          "markdownDescription": "Show real timestamps in the Claude Code chat panel. Changes apply live, without a reload."
         },
         "riplexaVsTimestamp.showStatusBar": {
           "type": "boolean",
@@ -61,7 +65,7 @@
         "riplexaVsTimestamp.userMessageColor": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Text color of **your own messages** in the Claude Code chat panel, as a CSS color — e.g. `#90EE90`, `lightgreen`, `rgb(144,238,144)`. Leave empty to keep Claude Code's color. Takes effect after the panel reloads."
+          "markdownDescription": "Text color of **your own messages** in the Claude Code chat panel, as a CSS color — e.g. `#90EE90`, `lightgreen`, `rgb(144,238,144)`. Leave empty to keep Claude Code's color. Changes apply live."
         }
       }
     }

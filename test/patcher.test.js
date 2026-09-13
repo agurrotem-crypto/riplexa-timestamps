@@ -54,10 +54,10 @@ test('apply is idempotent, keeps the original, and restore returns it byte for b
   const dir = tmpInstall(FIXTURE);
   const file = patcher.webviewFile(dir);
   assert.equal(patcher.status(dir), 'clean');
-  assert.deepEqual(patcher.apply(dir), { changed: true, message: 'patched' });
+  assert.deepEqual(patcher.apply(dir), { changed: true, liveChanged: true, message: 'patched' });
   assert.equal(patcher.status(dir), 'patched');
   assert.equal(fs.readFileSync(file + patcher.BACKUP_SUFFIX, 'utf8'), FIXTURE);
-  assert.deepEqual(patcher.apply(dir), { changed: false, message: 'already patched' });
+  assert.deepEqual(patcher.apply(dir), { changed: false, liveChanged: false, message: 'already patched' });
   assert.deepEqual(patcher.restore(dir), { changed: true, message: 'restored' });
   assert.equal(fs.readFileSync(file, 'utf8'), FIXTURE);
   assert.equal(fs.existsSync(file + patcher.BACKUP_SUFFIX), false);
@@ -93,21 +93,30 @@ function el(tag, cls, kids, props) {
   if (props) { let f = null; for (const p of props.slice().reverse()) f = { memoizedProps: p, return: f }; e.__reactFiber$test = { memoizedProps: {}, return: f }; }
   return e;
 }
-function runScript(userBubbles, assistantMessages) {
+const BASE = 'https://file+.vscode-resource.vscode-cdn.net/c%3A/ext/anthropic.claude-code-9/webview/';
+function runScript(userBubbles, assistantMessages, { withLink = true } = {}) {
   const ctx = {
-    window: {}, Date, Map, Set, Math, Array, String, isFinite,
+    window: {}, Date, Map, Set, Math, Array, String, isFinite, Object,
+    cssVars: {}, appended: [], images: [], intervals: [],
     document: {
-      createElement: () => ({}), documentElement: {},
-      head: { appendChild(s) { ctx.css = s.textContent; } },
+      createElement: (tag) => ({ tagName: tag.toUpperCase(), parentNode: null }),
+      documentElement: {},
+      querySelector: (sel) => (withLink && sel.includes('index.css') ? { href: BASE + 'index.css?v=1' } : null),
       querySelectorAll: (sel) => (sel.includes('userMessage_') ? userBubbles : assistantMessages),
     },
+    getComputedStyle: () => ({ getPropertyValue: (k) => ctx.cssVars[k] || '' }),
+    Image: function () { ctx.images.push(this); },
     MutationObserver: function (cb) { ctx.onMutation = cb; this.observe = () => {}; },
-    requestAnimationFrame: (f) => f(), setTimeout: (f) => f(),
+    requestAnimationFrame: (f) => f(), setTimeout: (f) => f(), setInterval: (f) => { ctx.intervals.push(f); },
   };
+  const head = { removeChild(n) { n.parentNode = null; ctx.appended = ctx.appended.filter((x) => x !== n); } };
+  head.appendChild = (n) => { n.parentNode = head; ctx.appended.push(n); };
+  ctx.document.head = head;
   vm.createContext(ctx);
   vm.runInContext(patcher.SCRIPT, ctx);
   return ctx;
 }
+const links = (ctx) => ctx.appended.filter((n) => n.tagName === 'LINK');
 const today = (h, m, s) => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate(), h, m, s).getTime(); };
 const ts = (e) => e._a['data-riplexa-ts'] || null;
 
@@ -122,7 +131,47 @@ test('the user message gets one time, inline on its text line, never on an attac
   assert.equal(ts(chip), null);
   assert.equal(ts(empty), null);
   assert.equal(ts(bubble), null);
-  assert.match(ctx.css, /display:inline-block;margin-inline-end/);
+  assert.equal(links(ctx).length, 1);
+  assert.match(links(ctx)[0].href, /^https:\/\/file\+\.vscode-resource\.vscode-cdn\.net\/c%3A\/ext\/anthropic\.claude-code-9\/webview\/riplexa-vs-timestamp\.css\?t=\d+$/);
+});
+
+test('live settings: Off clears every mark without a reload, On brings them back', () => {
+  const msg = { timestamp: today(21, 28, 44) };
+  const text = el('div', '', [txt('בלי RELOAD')]);
+  const ctx = runScript([el('div', 'userMessage_x', [text], [{ message: msg }])], []);
+  links(ctx)[0].onload();
+  assert.equal(ts(text), '21:28:44');
+  ctx.cssVars['--riplexa-ts-on'] = '0';
+  ctx.onMutation();
+  assert.equal(ts(text), null);
+  ctx.cssVars['--riplexa-ts-on'] = '1';
+  ctx.onMutation();
+  assert.equal(ts(text), '21:28:44');
+});
+
+test('live settings: the stylesheet is reloaded only when the revision image changes, and the old one is removed', () => {
+  const ctx = runScript([], []);
+  const first = links(ctx)[0];
+  first.onload();
+  assert.equal(ctx.images.length, 1);
+  assert.match(ctx.images[0].src, /riplexa-vs-timestamp\.rev\.svg\?t=\d+$/);
+  ctx.images[0].naturalWidth = 7; ctx.images[0].onload();          // first sighting: nothing to reload
+  assert.equal(links(ctx).length, 1);
+  ctx.intervals[0](); ctx.images[1].naturalWidth = 7; ctx.images[1].onload();   // same revision
+  assert.equal(links(ctx).length, 1);
+  ctx.intervals[0](); ctx.images[2].naturalWidth = 8; ctx.images[2].onload();   // settings changed
+  assert.equal(links(ctx).length, 2);
+  links(ctx)[1].onload();
+  assert.deepEqual(links(ctx).map((l) => l === first), [false], 'the previous stylesheet is gone once the new one loaded');
+});
+
+test('without a readable live stylesheet the marks still show, with the built-in style', () => {
+  const noLink = runScript([], [], { withLink: false });
+  const style = noLink.appended.find((n) => n.tagName === 'STYLE');
+  assert.ok(style && style.textContent === patcher.STAMP_CSS);
+  const failed = runScript([], []);
+  links(failed)[0].onerror();
+  assert.ok(failed.appended.some((n) => n.tagName === 'STYLE' && n.textContent === patcher.STAMP_CSS));
 });
 
 test('assistant rows: text and thinking get their time, a tool call gets start→result, unknown times get nothing', () => {
@@ -165,30 +214,39 @@ test('when React replaces the text element the time moves with it and the old no
   assert.equal(ts(first), null);
 });
 
-test('user message color: only a plain CSS color reaches the stylesheet', () => {
+test('live stylesheet: on/off flag, the stamp style only when on, and only a plain CSS color', () => {
   for (const ok of ['#90EE90', '#9e9', 'lightgreen', 'rgb(144,238,144)', 'hsl(120 73% 75%)']) assert.equal(patcher.safeColor(ok), ok);
   for (const bad of ['red;}body{display:none', 'lightgreen */ alert(1) /*', 'url(x)', 'var(--x)', '#12', '']) assert.equal(patcher.safeColor(bad), '');
-  const ctx = runScript([], []);
-  assert.doesNotMatch(ctx.css, /userMessage_/, 'no color rule by default');
-  const colored = { window: {}, Date, Map, Set, Math, Array, String, isFinite, document: { createElement: () => ({}), documentElement: {}, head: { appendChild(s) { colored.css = s.textContent; } }, querySelectorAll: () => [] }, MutationObserver: function () { this.observe = () => {}; }, requestAnimationFrame: (f) => f(), setTimeout: (f) => f() };
-  vm.createContext(colored);
-  vm.runInContext(patcher.buildScript({ userColor: '#90EE90' }), colored);
-  assert.match(colored.css, /\[class\*="userMessage_"\],\[class\*="userMessage_"\] \*\{color:#90EE90 !important;\}/);
-  assert.equal(patcher.buildScript({ userColor: 'red;}body{display:none' }), patcher.SCRIPT, 'a rejected color is the same as no color');
+  const on = patcher.liveCss({});
+  assert.match(on, /--riplexa-ts-on:1;/);
+  assert.ok(on.includes(patcher.STAMP_CSS));
+  assert.doesNotMatch(on, /userMessage_/);
+  const off = patcher.liveCss({ enabled: false, userColor: '#90EE90' });
+  assert.match(off, /--riplexa-ts-on:0;/);
+  assert.ok(!off.includes(patcher.STAMP_CSS));
+  assert.match(off, /\[class\*="userMessage_"\],\[class\*="userMessage_"\] \*\{color:#90EE90 !important;\}/, 'color is independent of the timestamps');
+  assert.equal(patcher.liveCss({ userColor: 'red;}body{display:none' }), on, 'a rejected color is the same as no color');
 });
 
-test('changing the color re-patches from the original, once, and the same color is a no-op', () => {
+test('settings changes never touch index.js: they rewrite the live files and bump the revision only on a real change', () => {
   const dir = tmpInstall(FIXTURE);
   const file = patcher.webviewFile(dir);
-  assert.equal(patcher.apply(dir).changed, true);
-  assert.equal(patcher.status(dir, { userColor: '#90EE90' }), 'outdated');
-  assert.deepEqual(patcher.apply(dir, { userColor: '#90EE90' }), { changed: true, message: 'patched' });
-  const out = fs.readFileSync(file, 'utf8');
-  assert.equal(out.split(patcher.ANY_MARK).length - 1, 1);
-  assert.match(out, /color:#90EE90 !important/);
-  assert.equal(fs.readFileSync(file + patcher.BACKUP_SUFFIX, 'utf8'), FIXTURE);
-  assert.deepEqual(patcher.apply(dir, { userColor: '#90EE90' }), { changed: false, message: 'already patched' });
-  new vm.Script(out);
+  const { css, rev } = patcher.liveFiles(dir);
+  const revOf = () => Number(fs.readFileSync(rev, 'utf8').match(/width="(\d+)"/)[1]);
+  assert.deepEqual(patcher.apply(dir, {}), { changed: true, liveChanged: true, message: 'patched' });
+  const patched = fs.readFileSync(file, 'utf8');
+  assert.equal(revOf(), 1);
+  assert.deepEqual(patcher.apply(dir, {}), { changed: false, liveChanged: false, message: 'already patched' });
+  assert.equal(revOf(), 1);
+  assert.deepEqual(patcher.apply(dir, { userColor: '#90EE90' }), { changed: false, liveChanged: true, message: 'already patched' });
+  assert.equal(revOf(), 2);
+  assert.match(fs.readFileSync(css, 'utf8'), /#90EE90/);
+  assert.deepEqual(patcher.apply(dir, { enabled: false, userColor: '#90EE90' }), { changed: false, liveChanged: true, message: 'already patched' });
+  assert.equal(revOf(), 3);
+  assert.equal(fs.readFileSync(file, 'utf8'), patched, 'index.js untouched by settings');
+  patcher.restore(dir);
+  assert.equal(fs.existsSync(css) || fs.existsSync(rev), false, 'restore removes the live files');
+  assert.equal(fs.readFileSync(file, 'utf8'), FIXTURE);
 });
 
 // Optional: the real Claude Code build(s) on this machine, when present.

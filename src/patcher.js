@@ -1,6 +1,6 @@
 'use strict';
 /*
- * Riplexa VS Timestamp — the patcher.
+ * Riplexa VS Timestamp — the Claude Code panel patcher.
  *
  * Claude Code's VS Code panel is a webview bundled as webview/index.js inside the Claude Code extension. It shows no
  * times at all, although every message it receives from the CLI carries the transcript's ISO `timestamp`. This module
@@ -10,23 +10,36 @@
  *           back to Date.now() when it is built — reopened history would read "now". Edit A passes the real time.
  *   Edit B  When a tool result arrives, record that message's real time on the tool row, so a tool call can show
  *           when it started and when its result came back.
- *   Script  Appended at the end: reads those times from React props and shows them through a data attribute and a
- *           CSS ::before at the start of the first text line — the user's message, every assistant row, and
- *           "start→result" on tool calls. It adds no DOM children to React-owned nodes. A row whose real time it
- *           cannot read shows nothing: never a guessed time.
+ *   Script  Appended at the end: reads those times from React props and marks the first text line of the user's
+ *           message, of every assistant row, and of every tool call ("start→result"). It adds no DOM children to
+ *           React-owned nodes. A row whose real time it cannot read shows nothing: never a guessed time.
+ *
+ * LIVE SETTINGS, NO RELOAD. How the marks look — on or off, and the user's message color — is not baked into the
+ * script. It lives in a stylesheet next to the panel (webview/riplexa-vs-timestamp.css) that the extension rewrites
+ * when a setting changes. The panel's security policy allows stylesheets and images from its own folder, so the
+ * script polls a one-pixel SVG whose WIDTH is a revision number, and reloads the stylesheet only when that number
+ * changes. Only installing or upgrading the patch itself needs the panel to reload.
  *
  * Minified identifiers change between Claude Code builds, so each edit matches a code SHAPE and must match exactly
- * once; otherwise nothing is written. The untouched original is kept beside the file and restored on disable or
+ * once; otherwise nothing is written. The untouched original is kept beside the file and restored on Remove or
  * uninstall.
  */
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const VERSION = 1;
+const VERSION = 2;
 const MARK = `/* RIPLEXA-VS-TIMESTAMP v${VERSION} */`;
 const ANY_MARK = '/* RIPLEXA-VS-TIMESTAMP v';
 const BACKUP_SUFFIX = '.riplexa-vs-timestamp.bak';
+const LIVE_CSS = 'riplexa-vs-timestamp.css';
+const LIVE_REV = 'riplexa-vs-timestamp.rev.svg';
+const ATTR = 'data-riplexa-ts';
+const POLL_MS = 1500;
+
+const STAMP_CSS = `[${ATTR}]::before{content:attr(${ATTR});display:inline-block;margin-inline-end:.7em;`
+  + 'unicode-bidi:isolate;vertical-align:baseline;font-family:var(--vscode-editor-font-family,monospace);'
+  + 'font-size:.8em;font-weight:normal;font-style:normal;opacity:.6;white-space:nowrap;}';
 
 /** A CSS color the user typed, or '' when it is not a plain color (nothing else may reach the stylesheet). */
 function safeColor(value) {
@@ -35,22 +48,63 @@ function safeColor(value) {
   return '';
 }
 
-/** The in-panel script for the given options. The options are part of the text, so a changed option re-patches. */
-function buildScript(opts = {}) {
-  const userColor = safeColor(opts.userColor);
-  const optionsCss = userColor ? `[class*="userMessage_"],[class*="userMessage_"] *{color:${userColor} !important;}` : '';
-  return `
+/** The live stylesheet for the given settings. `--riplexa-ts-on` tells the script whether to mark rows at all. */
+function liveCss(opts = {}) {
+  const on = opts.enabled !== false;
+  const color = safeColor(opts.userColor);
+  let css = `/* Riplexa VS Timestamp live settings - written by the extension */\n:root{--riplexa-ts-on:${on ? 1 : 0};}\n`;
+  if (on) css += STAMP_CSS + '\n';
+  if (color) css += `[class*="userMessage_"],[class*="userMessage_"] *{color:${color} !important;}\n`;
+  return css;
+}
+
+const SCRIPT = `
 ${MARK}
-/* options ${JSON.stringify({ userColor })} */
 ;(function(){try{
   if (window.__riplexaVsTimestamp) return; window.__riplexaVsTimestamp = true;
-  var USER = '[class*="userMessage_"]', ASSIST = '[data-testid="assistant-message"]', ATTR = 'data-riplexa-ts';
-  var st = document.createElement('style');
-  st.textContent = '[' + ATTR + ']::before{content:attr(' + ATTR + ');display:inline-block;margin-inline-end:.7em;'
-    + 'unicode-bidi:isolate;vertical-align:baseline;font-family:var(--vscode-editor-font-family,monospace);'
-    + 'font-size:.8em;font-weight:normal;font-style:normal;opacity:.6;white-space:nowrap;}'
-    + ${JSON.stringify(optionsCss)};
-  (document.head || document.documentElement).appendChild(st);
+  var USER = '[class*="userMessage_"]', ASSIST = '[data-testid="assistant-message"]', ATTR = ${JSON.stringify(ATTR)};
+  var head = document.head || document.documentElement;
+
+  // ── live settings: stylesheet + revision probe from the panel's own folder ──
+  var fallback = null, sheet = null, loadedOnce = false, lastRev = -1;
+  var base = (function(){
+    var l = document.querySelector('link[rel="stylesheet"][href*="index.css"]');
+    return l ? String(l.href).replace(/index\\.css([?#].*)?$/, '') : null;
+  })();
+  var useFallback = function(){
+    if (fallback || loadedOnce) return;
+    fallback = document.createElement('style');
+    fallback.textContent = ${JSON.stringify(STAMP_CSS)};
+    head.appendChild(fallback);
+  };
+  var reloadCss = function(){
+    if (!base) { useFallback(); return; }
+    var l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = base + ${JSON.stringify(LIVE_CSS)} + '?t=' + Date.now();
+    l.onload = function(){
+      if (sheet && sheet !== l && sheet.parentNode) sheet.parentNode.removeChild(sheet);
+      sheet = l; loadedOnce = true;
+      if (fallback && fallback.parentNode) { fallback.parentNode.removeChild(fallback); fallback = null; }
+      schedule();
+    };
+    l.onerror = function(){ if (l.parentNode) l.parentNode.removeChild(l); useFallback(); schedule(); };
+    head.appendChild(l);
+  };
+  var probe = function(){
+    if (!base) return;
+    var img = new Image();
+    img.onload = function(){ var w = img.naturalWidth; if (w !== lastRev) { var first = lastRev === -1; lastRev = w; if (!first) reloadCss(); } };
+    img.src = base + ${JSON.stringify(LIVE_REV)} + '?t=' + Date.now();
+  };
+  var isOn = function(){
+    try {
+      var v = String(getComputedStyle(document.documentElement).getPropertyValue('--riplexa-ts-on') || '').trim();
+      return v !== '0';
+    } catch (e) { return true; }
+  };
+
+  // ── marks ──
   var p2 = function(n){ return (n < 10 ? '0' : '') + n; };
   var fmt = function(ms){
     if (typeof ms !== 'number' || !isFinite(ms)) return '';
@@ -92,6 +146,7 @@ ${MARK}
     marked = nextMarked; nextMarked = new Set();
   };
   var stamp = function(){
+    if (!isOn()) { sweep(); return; }
     var bubbles = document.querySelectorAll(USER), groups = new Map();
     for (var i = 0; i < bubbles.length; i++) {
       var b = bubbles[i], c = ctxOf(b);
@@ -120,15 +175,17 @@ ${MARK}
   };
   var queued = false, last = 0;
   var run = function(){ queued = false; last = Date.now(); try { stamp(); } catch (e) {} };
-  new MutationObserver(function(){
+  var schedule = function(){
     if (queued) return; queued = true;
     setTimeout(function(){ requestAnimationFrame(run); }, Math.max(0, 250 - (Date.now() - last)));
-  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  };
+  new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  reloadCss();
+  probe();
+  setInterval(probe, ${POLL_MS});
   run();
 }catch(e){}})();
 `;
-}
-const SCRIPT = buildScript();
 
 const EDITS = [
   {
@@ -144,7 +201,7 @@ const EDITS = [
 ];
 
 /** Pure transform. Returns { out } or { error }. Never partially applies. */
-function patchSource(src, opts = {}) {
+function patchSource(src) {
   if (src.includes(ANY_MARK)) return { error: 'already patched' };
   let out = src;
   for (const e of EDITS) {
@@ -152,58 +209,85 @@ function patchSource(src, opts = {}) {
     if (hits.length !== 1) return { error: `"${e.name}" matched ${hits.length} times (expected 1) - this Claude Code build is not supported yet` };
     out = out.replace(e.re, e.to);
   }
-  out = out + '\n' + buildScript(opts);
+  out = out + '\n' + SCRIPT;
   try { new vm.Script(out, { filename: 'index.js' }); }
   catch (err) { return { error: `patched code does not parse: ${err.message}` }; }
   return { out };
 }
 
 function webviewFile(claudeExtensionPath) { return path.join(claudeExtensionPath, 'webview', 'index.js'); }
+function liveFiles(claudeExtensionPath) {
+  const dir = path.join(claudeExtensionPath, 'webview');
+  return { css: path.join(dir, LIVE_CSS), rev: path.join(dir, LIVE_REV) };
+}
 
-/** State of one Claude Code install: 'patched' (this version with these options), 'outdated' (another version or
- *  other options of this patch), 'clean', 'missing'. */
-function status(claudeExtensionPath, opts = {}) {
+/** State of one Claude Code install: 'patched' (this version), 'outdated' (another version of this patch), 'clean', 'missing'. */
+function status(claudeExtensionPath) {
   const file = webviewFile(claudeExtensionPath);
   if (!fs.existsSync(file)) return 'missing';
   const src = fs.readFileSync(file, 'utf8');
-  if (src.endsWith(buildScript(opts))) return 'patched';
+  if (src.includes(MARK)) return 'patched';
   if (src.includes(ANY_MARK)) return 'outdated';
   return 'clean';
 }
 
-/** Apply (or upgrade) the patch. Returns { changed, message }. Writes atomically; keeps the untouched original. */
+function writeAtomic(file, text) {
+  const tmp = file + '.riplexa-vs-timestamp.tmp';
+  fs.writeFileSync(tmp, text);
+  fs.renameSync(tmp, file);
+}
+
+/** Write the live settings. Bumps the revision only when the stylesheet actually changed. Returns true if changed. */
+function writeLive(claudeExtensionPath, opts = {}) {
+  const { css, rev } = liveFiles(claudeExtensionPath);
+  if (!fs.existsSync(path.dirname(css))) return false;
+  const next = liveCss(opts);
+  let current = null;
+  try { current = fs.readFileSync(css, 'utf8'); } catch (_) {}
+  if (current === next && fs.existsSync(rev)) return false;
+  let n = 0;
+  try { n = Number((fs.readFileSync(rev, 'utf8').match(/width="(\d+)"/) || [])[1]) || 0; } catch (_) {}
+  n = (n % 60000) + 1;
+  writeAtomic(css, next);
+  writeAtomic(rev, `<svg xmlns="http://www.w3.org/2000/svg" width="${n}" height="1"></svg>`);
+  return true;
+}
+
+/** Apply (or upgrade) the patch and write the live settings. Returns { changed, liveChanged, message }. */
 function apply(claudeExtensionPath, opts = {}) {
   const file = webviewFile(claudeExtensionPath);
   const backup = file + BACKUP_SUFFIX;
-  const state = status(claudeExtensionPath, opts);
-  if (state === 'missing') return { changed: false, message: `Claude Code webview not found at ${file}` };
-  if (state === 'patched') return { changed: false, message: 'already patched' };
-  let original;
-  if (state === 'outdated') {
-    if (!fs.existsSync(backup)) return { changed: false, message: 'an older patch is present but its backup is missing; reinstall Claude Code' };
-    original = fs.readFileSync(backup, 'utf8');
-  } else {
-    original = fs.readFileSync(file, 'utf8');
+  const state = status(claudeExtensionPath);
+  if (state === 'missing') return { changed: false, liveChanged: false, message: `Claude Code webview not found at ${file}` };
+  let changed = false, message = 'already patched';
+  if (state !== 'patched') {
+    let original;
+    if (state === 'outdated') {
+      if (!fs.existsSync(backup)) return { changed: false, liveChanged: false, message: 'an older patch is present but its backup is missing; reinstall Claude Code' };
+      original = fs.readFileSync(backup, 'utf8');
+    } else {
+      original = fs.readFileSync(file, 'utf8');
+    }
+    const r = patchSource(original);
+    if (r.error) return { changed: false, liveChanged: false, message: r.error };
+    if (state === 'clean') fs.writeFileSync(backup, original);
+    writeAtomic(file, r.out);
+    changed = true; message = 'patched';
   }
-  const r = patchSource(original, opts);
-  if (r.error) return { changed: false, message: r.error };
-  if (state === 'clean') fs.writeFileSync(backup, original);
-  const tmp = file + '.riplexa-vs-timestamp.tmp';
-  fs.writeFileSync(tmp, r.out);
-  fs.renameSync(tmp, file);
-  return { changed: true, message: 'patched' };
+  const liveChanged = writeLive(claudeExtensionPath, opts);
+  return { changed, liveChanged, message };
 }
 
-/** Put the original back and remove the backup. Returns { changed, message }. */
+/** Put the original back and remove the backup and the live files. Returns { changed, message }. */
 function restore(claudeExtensionPath) {
   const file = webviewFile(claudeExtensionPath);
   const backup = file + BACKUP_SUFFIX;
+  const { css, rev } = liveFiles(claudeExtensionPath);
+  for (const f of [css, rev]) { try { fs.unlinkSync(f); } catch (_) {} }
   if (!fs.existsSync(backup)) return { changed: false, message: 'nothing to restore' };
   const original = fs.readFileSync(backup, 'utf8');
   if (original.includes(ANY_MARK)) return { changed: false, message: 'backup is itself patched; not restored' };
-  const tmp = file + '.riplexa-vs-timestamp.tmp';
-  fs.writeFileSync(tmp, original);
-  fs.renameSync(tmp, file);
+  writeAtomic(file, original);
   fs.unlinkSync(backup);
   return { changed: true, message: 'restored' };
 }
@@ -215,4 +299,7 @@ function findInstalls(extensionsDir) {
   return names.filter((n) => n.toLowerCase().startsWith('anthropic.claude-code-')).map((n) => path.join(extensionsDir, n));
 }
 
-module.exports = { VERSION, MARK, ANY_MARK, BACKUP_SUFFIX, SCRIPT, EDITS, safeColor, buildScript, patchSource, status, apply, restore, findInstalls, webviewFile };
+module.exports = {
+  VERSION, MARK, ANY_MARK, BACKUP_SUFFIX, LIVE_CSS, LIVE_REV, ATTR, STAMP_CSS, SCRIPT, EDITS,
+  safeColor, liveCss, patchSource, status, writeLive, apply, restore, findInstalls, webviewFile, liveFiles,
+};

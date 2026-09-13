@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0
+
+- On/Off and the message color now change **live**, with no reload: they live in a stylesheet next to the panel, which the panel re-reads when a one-pixel revision image changes.
+- Turning timestamps off no longer rewrites Claude Code's files; the new **Remove from Claude Code** command (and uninstall) restores the originals.
+
 ## 0.3.0
 
 - Status bar toggle `Timestamp: On/Off` (click to switch) and the command `Riplexa VS Timestamp: Toggle On/Off`.

@@ -31,32 +31,34 @@ Claude Code's chat panel is a web page bundled inside the Claude Code extension 
 2. Records when each tool result arrived.
 3. Adds a small script that shows those times through CSS.
 
+**Settings change live, with no reload.** On/Off and colors live in a small stylesheet next to the panel, which the extension rewrites and the panel picks up within about two seconds. Only the first install and upgrades need one reload.
+
 Safety:
 
 - The untouched original is saved next to the file (`index.js.riplexa-vs-timestamp.bak`) before anything changes.
 - Every edit must match exactly once, or nothing is written. An unsupported Claude Code build is left untouched and you get a warning.
 - The patched file is checked to parse before it replaces the original, and it is written atomically.
-- **Disable** (command or setting) or **uninstall** restores the original file.
+- **Remove** (command) or **uninstall** restores the original files.
 - Nothing is sent anywhere. No network, no telemetry.
 
 ## Usage
 
-Install, then reload the window (or close and reopen the Claude Code panel) when prompted.
+Install, then reload the window (or close and reopen the Claude Code panel) once when prompted.
 
-**Status bar toggle:** `Timestamp: On` / `Timestamp: Off` at the bottom of the window. Click it to switch.
+**Status bar toggle:** `Timestamp: On` / `Timestamp: Off` at the bottom of the window. Click it to switch. The change is live.
 
 | Command | What it does |
 | --- | --- |
-| `Riplexa VS Timestamp: Toggle On/Off` | Same as clicking the status bar item |
-| `Riplexa VS Timestamp: Enable` | Apply the patch (it is on by default) |
-| `Riplexa VS Timestamp: Disable` | Restore Claude Code's original panel |
+| `Riplexa VS Timestamp: Toggle On/Off` | Same as clicking the status bar item (live) |
+| `Riplexa VS Timestamp: Turn On` / `Turn Off` | Explicit on / off (live) |
+| `Riplexa VS Timestamp: Remove from Claude Code` | Restore Claude Code's original files (reload to finish) |
 | `Riplexa VS Timestamp: Show Status` | Show whether each Claude Code install is patched |
 
-Settings:
+Settings (all live):
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `riplexaVsTimestamp.enabled` | `true` | Timestamps on or off (off restores the original panel) |
+| `riplexaVsTimestamp.enabled` | `true` | Timestamps on or off |
 | `riplexaVsTimestamp.showStatusBar` | `true` | Show the On/Off toggle in the status bar |
 | `riplexaVsTimestamp.userMessageColor` | empty | Text color of your own messages, as a CSS color, e.g. `#90EE90` or `lightgreen`, so your side of the conversation stands out |
 
@@ -65,7 +67,7 @@ Settings:
 ## Limitations
 
 - The patch targets the structure of Claude Code's panel code. If a future Claude Code build changes it, this extension refuses to patch and tells you, rather than guessing. Please open an issue.
-- Changes appear after the panel reloads.
+- The first install and each upgrade of the patch appear after the panel reloads once.
 - This is an unofficial, community extension. It is not made by, endorsed by or affiliated with Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic.
 
 ## License
