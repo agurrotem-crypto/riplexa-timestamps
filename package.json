@@ -1,0 +1,65 @@
+{
+  "name": "riplexa-vs-timestamp",
+  "displayName": "Riplexa VS Timestamp",
+  "description": "Shows the real time on every message, reply and tool call inside the Claude Code chat panel — inline on the text line, start→result on tools.",
+  "version": "0.2.0",
+  "publisher": "agurrotem",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "timestamp",
+    "timestamps",
+    "time",
+    "chat",
+    "ai-chat"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "extensionDependencies": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "riplexaVsTimestamp.enable",
+        "title": "Riplexa VS Timestamp: Enable"
+      },
+      {
+        "command": "riplexaVsTimestamp.disable",
+        "title": "Riplexa VS Timestamp: Disable (restore original Claude Code panel)"
+      },
+      {
+        "command": "riplexaVsTimestamp.status",
+        "title": "Riplexa VS Timestamp: Show Status"
+      }
+    ],
+    "configuration": {
+      "title": "Riplexa VS Timestamp",
+      "properties": {
+        "riplexaVsTimestamp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show real timestamps in the Claude Code chat panel. Turning this off restores Claude Code's original panel file (reload the window afterwards)."
+        },
+        "riplexaVsTimestamp.userMessageColor": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Text color of **your own messages** in the Claude Code chat panel, as a CSS color — e.g. `#90EE90`, `lightgreen`, `rgb(144,238,144)`. Leave empty to keep Claude Code's color. Takes effect after the panel reloads."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test test/patcher.test.js",
+    "package": "vsce package",
+    "vscode:uninstall": "node ./uninstall.js"
+  }
+}
