@@ -1,8 +1,8 @@
 {
   "name": "riplexa-vs-timestamp",
   "displayName": "Riplexa VS Timestamp",
-  "description": "Shows the real time on every message, reply and tool call inside the Claude Code chat panel — inline on the text line, start→result on tools. On/Off and colors change live.",
-  "version": "0.4.0",
+  "description": "Shows the real time on every message, reply and tool call inside the Claude Code and Codex chat panels — inline on the text line, start→result on tools. On/Off and colors change live.",
+  "version": "0.5.0",
   "publisher": "agurrotem",
   "license": "MIT",
   "engines": {
@@ -15,6 +15,9 @@
     "claude",
     "claude-code",
     "anthropic",
+    "codex",
+    "openai",
+    "chatgpt",
     "timestamp",
     "timestamps",
     "time",
@@ -42,7 +45,7 @@
       },
       {
         "command": "riplexaVsTimestamp.remove",
-        "title": "Riplexa VS Timestamp: Remove from Claude Code (restore original files)"
+        "title": "Riplexa VS Timestamp: Remove from chat panels (restore original files)"
       },
       {
         "command": "riplexaVsTimestamp.status",
@@ -55,7 +58,12 @@
         "riplexaVsTimestamp.enabled": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Show real timestamps in the Claude Code chat panel. Changes apply live, without a reload."
+          "markdownDescription": "Show real timestamps in the Claude Code and Codex chat panels. Changes apply live, without a reload."
+        },
+        "riplexaVsTimestamp.diagnostics": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show a small diagnostics box in the Codex panel: what the extension found (messages, commands, items) and where it placed each time. Use it when a panel shows no times, and include a screenshot in a bug report. Live."
         },
         "riplexaVsTimestamp.showStatusBar": {
           "type": "boolean",
@@ -71,7 +79,7 @@
     }
   },
   "scripts": {
-    "test": "node --test test/patcher.test.js test/extension.test.js",
+    "test": "node --test test/patcher.test.js test/codex.test.js test/extension.test.js",
     "package": "vsce package",
     "vscode:uninstall": "node ./uninstall.js"
   }

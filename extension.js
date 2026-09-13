@@ -1,25 +1,27 @@
 'use strict';
 const vscode = require('vscode');
 const path = require('path');
-const patcher = require('./src/patcher');
+const live = require('./src/live');
 
-const CLAUDE_ID = 'anthropic.claude-code';
+// One adapter per chat panel. Each knows how to find its host extension's installs, apply, restore and report.
+const ADAPTERS = [require('./src/patcher'), require('./src/codex')];
+
 const SETTING = 'riplexaVsTimestamp.enabled';
 const COLOR_SETTING = 'riplexaVsTimestamp.userMessageColor';
 const STATUS_BAR_SETTING = 'riplexaVsTimestamp.showStatusBar';
+const DEBUG_SETTING = 'riplexaVsTimestamp.diagnostics';
 const REMOVED_KEY = 'riplexaVsTimestamp.removed';
 
-/** Every Claude Code install this editor can load: the active one plus sibling versions in the same folder. */
-function installs() {
-  const ext = vscode.extensions.getExtension(CLAUDE_ID);
+/** Every install of this adapter's host extension: the active one plus sibling versions in the same folder. */
+function installs(adapter) {
+  const ext = vscode.extensions.getExtension(adapter.id);
   if (!ext) return [];
-  const siblings = patcher.findInstalls(path.dirname(ext.extensionPath));
-  return Array.from(new Set([ext.extensionPath, ...siblings]));
+  return Array.from(new Set([ext.extensionPath, ...adapter.findInstalls(path.dirname(ext.extensionPath))]));
 }
 
 const cfg = () => vscode.workspace.getConfiguration();
 function enabled() { return cfg().get(SETTING, true); }
-function options() { return { enabled: enabled(), userColor: cfg().get(COLOR_SETTING, '') }; }
+function options() { return { enabled: enabled(), userColor: cfg().get(COLOR_SETTING, ''), debug: cfg().get(DEBUG_SETTING, false) }; }
 
 async function offerReload(text) {
   const pick = await vscode.window.showInformationMessage(text, 'Reload Window');
@@ -31,36 +33,36 @@ function activate(context) {
   context.subscriptions.push(log);
   const removed = () => context.globalState.get(REMOVED_KEY, false) === true;
 
-  /* On/off and color are live (the panel picks them up within ~2 s). Only installing, upgrading or removing the
-     patch itself asks for a reload. */
+  /* On/off, colors and diagnostics are live (each panel picks them up within ~2 s). Only installing, upgrading or
+     removing the patch itself asks for a reload, once. */
   async function sync({ interactive = false } = {}) {
-    const list = installs();
-    if (!list.length) {
-      if (interactive) vscode.window.showWarningMessage('Riplexa VS Timestamp: the Claude Code extension is not installed.');
-      return;
-    }
-    let patched = false, restored = false;
-    const problems = [];
-    for (const dir of list) {
-      try {
-        if (removed()) {
-          const r = patcher.restore(dir);
-          log.appendLine(`${path.basename(dir)}: ${r.message}`);
-          if (r.changed) restored = true;
-        } else {
-          const r = patcher.apply(dir, options());
-          log.appendLine(`${path.basename(dir)}: ${r.message}${r.liveChanged ? ' (live settings updated)' : ''}`);
-          if (r.changed) patched = true;
-          else if (r.message !== 'already patched') problems.push(`${path.basename(dir)}: ${r.message}`);
+    const patchedPanels = [], restoredPanels = [], problems = [];
+    let found = 0;
+    for (const adapter of ADAPTERS) {
+      for (const dir of installs(adapter)) {
+        found++;
+        const label = `${adapter.name} (${path.basename(dir)})`;
+        try {
+          if (removed()) {
+            const r = adapter.restore(dir);
+            log.appendLine(`${label}: ${r.message}`);
+            if (r.changed && !restoredPanels.includes(adapter.name)) restoredPanels.push(adapter.name);
+          } else {
+            const r = adapter.apply(dir, options());
+            log.appendLine(`${label}: ${r.message}${r.liveChanged ? ' (live settings updated)' : ''}`);
+            if (r.changed && !patchedPanels.includes(adapter.name)) patchedPanels.push(adapter.name);
+            else if (!r.changed && r.message !== 'already patched') problems.push(`${label}: ${r.message}`);
+          }
+        } catch (e) {
+          problems.push(`${label}: ${e.message}`);
+          log.appendLine(`${label}: error ${e.stack || e.message}`);
         }
-      } catch (e) {
-        problems.push(`${path.basename(dir)}: ${e.message}`);
-        log.appendLine(`${path.basename(dir)}: error ${e.stack || e.message}`);
       }
     }
+    if (!found && interactive) vscode.window.showWarningMessage('Riplexa VS Timestamp: no supported chat panel (Claude Code, Codex) is installed.');
     if (problems.length) vscode.window.showWarningMessage('Riplexa VS Timestamp: ' + problems.join(' | '));
-    if (patched) offerReload('Riplexa VS Timestamp is installed in Claude Code. Reload the window (or reopen the Claude Code panel) once to start; after that, On/Off and colors change live.');
-    if (restored) offerReload('Riplexa VS Timestamp was removed from Claude Code. Reload the window to finish.');
+    if (patchedPanels.length) offerReload(`Riplexa VS Timestamp is installed in ${patchedPanels.join(' and ')}. Reload the window (or reopen the panel) once to start; after that, On/Off and colors change live.`);
+    if (restoredPanels.length) offerReload(`Riplexa VS Timestamp was removed from ${restoredPanels.join(' and ')}. Reload the window to finish.`);
   }
 
   // Status bar toggle: shows On/Off and flips it on click.
@@ -91,17 +93,18 @@ function activate(context) {
       await sync({ interactive: true });
     }),
     vscode.commands.registerCommand('riplexaVsTimestamp.status', () => {
-      const lines = installs().map((d) => `${path.basename(d)}: ${patcher.status(d)}`);
-      vscode.window.showInformationMessage('Riplexa VS Timestamp — ' + (lines.join(' | ') || 'Claude Code not installed') + (removed() ? ' (removed)' : ''));
+      const lines = [];
+      for (const adapter of ADAPTERS) for (const d of installs(adapter)) lines.push(`${adapter.name} ${path.basename(d)}: ${adapter.status(d)}`);
+      vscode.window.showInformationMessage('Riplexa VS Timestamp — ' + (lines.join(' | ') || 'no supported panel installed') + (removed() ? ' (removed)' : ''));
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration(SETTING) || e.affectsConfiguration(STATUS_BAR_SETTING)) renderBar();
-      if (!e.affectsConfiguration(SETTING) && !e.affectsConfiguration(COLOR_SETTING)) return;
+      if (![SETTING, COLOR_SETTING, DEBUG_SETTING].some((k) => e.affectsConfiguration(k))) return;
       const c = cfg().get(COLOR_SETTING, '');
-      if (c && !patcher.safeColor(c)) vscode.window.showWarningMessage(`Riplexa VS Timestamp: "${c}" is not a CSS color (use e.g. #90EE90, lightgreen or rgb(144,238,144)); your message color is left unchanged.`);
+      if (c && !live.safeColor(c)) vscode.window.showWarningMessage(`Riplexa VS Timestamp: "${c}" is not a CSS color (use e.g. #90EE90, lightgreen or rgb(144,238,144)); your message color is left unchanged.`);
       sync();
     }),
-    // Claude Code updates arrive as a new extension folder: patch it as soon as it appears.
+    // Host extension updates arrive as a new folder: patch it as soon as it appears.
     vscode.extensions.onDidChange(() => sync()),
   );
 

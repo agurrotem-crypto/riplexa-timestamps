@@ -32,31 +32,9 @@ const VERSION = 2;
 const MARK = `/* RIPLEXA-VS-TIMESTAMP v${VERSION} */`;
 const ANY_MARK = '/* RIPLEXA-VS-TIMESTAMP v';
 const BACKUP_SUFFIX = '.riplexa-vs-timestamp.bak';
-const LIVE_CSS = 'riplexa-vs-timestamp.css';
-const LIVE_REV = 'riplexa-vs-timestamp.rev.svg';
-const ATTR = 'data-riplexa-ts';
-const POLL_MS = 1500;
-
-const STAMP_CSS = `[${ATTR}]::before{content:attr(${ATTR});display:inline-block;margin-inline-end:.7em;`
-  + 'unicode-bidi:isolate;vertical-align:baseline;font-family:var(--vscode-editor-font-family,monospace);'
-  + 'font-size:.8em;font-weight:normal;font-style:normal;opacity:.6;white-space:nowrap;}';
-
-/** A CSS color the user typed, or '' when it is not a plain color (nothing else may reach the stylesheet). */
-function safeColor(value) {
-  const v = String(value || '').trim();
-  if (/^#[0-9a-fA-F]{3,8}$/.test(v) || /^[a-zA-Z]{3,30}$/.test(v) || /^(rgb|rgba|hsl|hsla)\([0-9.,%\s/deg]+\)$/.test(v)) return v;
-  return '';
-}
-
-/** The live stylesheet for the given settings. `--riplexa-ts-on` tells the script whether to mark rows at all. */
-function liveCss(opts = {}) {
-  const on = opts.enabled !== false;
-  const color = safeColor(opts.userColor);
-  let css = `/* Riplexa VS Timestamp live settings - written by the extension */\n:root{--riplexa-ts-on:${on ? 1 : 0};}\n`;
-  if (on) css += STAMP_CSS + '\n';
-  if (color) css += `[class*="userMessage_"],[class*="userMessage_"] *{color:${color} !important;}\n`;
-  return css;
-}
+const live = require('./live');
+const { LIVE_CSS, LIVE_REV, ATTR, POLL_MS, STAMP_CSS, safeColor } = live;
+const liveCss = (opts = {}) => live.liveCss({ ...opts, userSelector: '[class*="userMessage_"]' });
 
 const SCRIPT = `
 ${MARK}
@@ -239,18 +217,7 @@ function writeAtomic(file, text) {
 
 /** Write the live settings. Bumps the revision only when the stylesheet actually changed. Returns true if changed. */
 function writeLive(claudeExtensionPath, opts = {}) {
-  const { css, rev } = liveFiles(claudeExtensionPath);
-  if (!fs.existsSync(path.dirname(css))) return false;
-  const next = liveCss(opts);
-  let current = null;
-  try { current = fs.readFileSync(css, 'utf8'); } catch (_) {}
-  if (current === next && fs.existsSync(rev)) return false;
-  let n = 0;
-  try { n = Number((fs.readFileSync(rev, 'utf8').match(/width="(\d+)"/) || [])[1]) || 0; } catch (_) {}
-  n = (n % 60000) + 1;
-  writeAtomic(css, next);
-  writeAtomic(rev, `<svg xmlns="http://www.w3.org/2000/svg" width="${n}" height="1"></svg>`);
-  return true;
+  return live.writeLive(path.join(claudeExtensionPath, 'webview'), { ...opts, userSelector: '[class*="userMessage_"]' });
 }
 
 /** Apply (or upgrade) the patch and write the live settings. Returns { changed, liveChanged, message }. */
@@ -300,6 +267,7 @@ function findInstalls(extensionsDir) {
 }
 
 module.exports = {
+  id: 'anthropic.claude-code', name: 'Claude Code',
   VERSION, MARK, ANY_MARK, BACKUP_SUFFIX, LIVE_CSS, LIVE_REV, ATTR, STAMP_CSS, SCRIPT, EDITS,
   safeColor, liveCss, patchSource, status, writeLive, apply, restore, findInstalls, webviewFile, liveFiles,
 };

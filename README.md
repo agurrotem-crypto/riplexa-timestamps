@@ -1,6 +1,6 @@
 # Riplexa VS Timestamp
 
-**See when everything happened in the Claude Code chat panel.** Every message you send, every reply, every thinking block and every tool call gets its real time, inline on the text line.
+**See when everything happened in your AI chat panels — Claude Code and Codex.** Every message you send, every reply, every thinking block and every tool call gets its real time, inline on the text line.
 
 ```
 20:58:57  בדיקה 4                                   ← your message
@@ -22,6 +22,15 @@ The Claude Code extension for VS Code shows no times at all (see [anthropics/cla
 - Works with right-to-left text (Hebrew, Arabic, Persian) and alongside [Claude Code RTL Support](https://marketplace.visualstudio.com/items?itemName=yechielby.claude-code-rtl).
 
 **No guessed times, ever.** The times come from the timestamps Claude Code already records in its transcript. If a row's real time is not available (for example a reply that is still streaming), that row shows nothing until it is.
+
+## Supported panels
+
+| Panel | Extension | How |
+| --- | --- | --- |
+| Claude Code | `anthropic.claude-code` | A marked edit of the panel's `webview/index.js` (see below) |
+| Codex | `openai.chatgpt` | One marked `<script>` line in the panel's `webview/index.html`; Codex's own code is not edited. Codex already keeps the times (it shows some of them only on hover); the script puts them on the text line |
+
+Turn on `riplexaVsTimestamp.diagnostics` to see, inside the Codex panel, what was found and where each time was placed.
 
 ## How it works
 
@@ -60,6 +69,7 @@ Settings (all live):
 | --- | --- | --- |
 | `riplexaVsTimestamp.enabled` | `true` | Timestamps on or off |
 | `riplexaVsTimestamp.showStatusBar` | `true` | Show the On/Off toggle in the status bar |
+| `riplexaVsTimestamp.diagnostics` | `false` | Show a diagnostics box in the Codex panel |
 | `riplexaVsTimestamp.userMessageColor` | empty | Text color of your own messages, as a CSS color, e.g. `#90EE90` or `lightgreen`, so your side of the conversation stands out |
 
 **After Claude Code updates**, the new version is patched automatically, and you are asked to reload once.

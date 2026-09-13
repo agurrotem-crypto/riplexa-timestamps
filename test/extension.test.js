@@ -14,7 +14,7 @@ const FIXTURE = [
   'function pm($,J){if(J.type==="user"){if(Array.isArray(J.message.content)){for(let X of J.message.content)if(X.type==="tool_result"){let Q=l51($,X.tool_use_id);if(Q)Q.setToolResult(X)}}}}',
 ].join('\n');
 
-function fakeVscode(claudeDir, initialConfig) {
+function fakeVscode(claudeDir, initialConfig, codexDir) {
   const config = { ...initialConfig };
   const configListeners = [];
   const messages = [];
@@ -43,7 +43,8 @@ function fakeVscode(claudeDir, initialConfig) {
       executeCommand: async () => {},
     },
     extensions: {
-      getExtension: (id) => (id === 'anthropic.claude-code' ? { extensionPath: claudeDir } : undefined),
+      getExtension: (id) => (id === 'anthropic.claude-code' && claudeDir ? { extensionPath: claudeDir }
+        : id === 'openai.chatgpt' && codexDir ? { extensionPath: codexDir } : undefined),
       onDidChange: () => ({ dispose() {} }),
     },
   };
@@ -139,6 +140,40 @@ test('Remove restores the original files and stays removed until turned on again
   await settle();
   assert.equal(patcher.status(dir), 'patched');
   assert.match(fake.bar.text, /Timestamp: On/);
+});
+
+test('Claude Code and Codex together: one reload prompt naming both, one toggle switches both live, Remove restores both', async () => {
+  const codex = require('../src/codex');
+  const live = require('../src/live');
+  const claudeDir = tmpClaude();
+  const codexRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'exts-'));
+  const codexDir = path.join(codexRoot, 'openai.chatgpt-26.1.1');
+  fs.mkdirSync(path.join(codexDir, 'webview', 'assets'), { recursive: true });
+  const html = '<html><head><!-- PROD_BASE_TAG_HERE --></head><body></body></html>';
+  fs.writeFileSync(path.join(codexDir, 'webview', 'index.html'), html);
+  const fake = fakeVscode(claudeDir, { 'riplexaVsTimestamp.userMessageColor': '#90EE90' }, codexDir);
+  await loadExtension(fake).activate(fake.context);
+  assert.equal(patcher.status(claudeDir), 'patched');
+  assert.equal(codex.status(codexDir), 'patched');
+  const prompts = fake.messages.filter(([, m]) => /Reload the window/.test(m));
+  assert.equal(prompts.length, 1);
+  assert.match(prompts[0][1], /Claude Code and Codex/);
+  const codexCss = () => fs.readFileSync(path.join(codex.liveDir(codexDir), live.LIVE_CSS), 'utf8');
+  assert.match(codexCss(), /\[data-riplexa-user\].*#90EE90/);
+
+  await fake.commands['riplexaVsTimestamp.toggle']();
+  await settle();
+  assert.match(codexCss(), /--riplexa-ts-on:0;/);
+  assert.match(fs.readFileSync(patcher.liveFiles(claudeDir).css, 'utf8'), /--riplexa-ts-on:0;/);
+
+  fake.config['riplexaVsTimestamp.diagnostics'] = true;
+  fake.fire('riplexaVsTimestamp.diagnostics');
+  await settle();
+  assert.match(codexCss(), /--riplexa-ts-debug:1;/);
+
+  await fake.commands['riplexaVsTimestamp.remove']();
+  assert.equal(fs.readFileSync(codex.htmlFile(codexDir), 'utf8'), html);
+  assert.equal(fs.readFileSync(patcher.webviewFile(claudeDir), 'utf8'), FIXTURE);
 });
 
 test('the status bar item can be hidden by setting', async () => {
