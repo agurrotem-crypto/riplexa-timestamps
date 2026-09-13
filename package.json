@@ -5,6 +5,14 @@
   "version": "0.7.1",
   "publisher": "agurrotem",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agurrotem-crypto/riplexa-timestamps"
+  },
+  "bugs": {
+    "url": "https://github.com/agurrotem-crypto/riplexa-timestamps/issues"
+  },
+  "homepage": "https://github.com/agurrotem-crypto/riplexa-timestamps#readme",
   "engines": {
     "vscode": "^1.94.0"
   },
