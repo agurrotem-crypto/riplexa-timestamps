@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.3
+
+- Riplexa "R" logo as the extension icon.
+
 ## 0.7.2
 
 - First Marketplace build: publisher `Riplexa`; repository, issues and homepage links.

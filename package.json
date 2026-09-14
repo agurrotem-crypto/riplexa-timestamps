@@ -2,8 +2,9 @@
   "name": "riplexa-timestamps",
   "displayName": "Riplexa Timestamps for Claude & Codex",
   "description": "Real timestamps inline, right inside the conversation, in the Claude Code and Codex chat panels — on every message you send, every reply, and every tool call (start→end). Not a side panel. On/Off and colors change live.",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "publisher": "Riplexa",
+  "icon": "images/icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
